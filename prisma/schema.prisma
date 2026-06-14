@@ -105,10 +105,22 @@ enum RiskLevel {
   HIGH
 }
 
+enum OrganizationType {
+  PUBLIC_LIBRARY
+  SCHOOL
+  PRIVATE_SCHOOL
+  CHURCH
+  MOSQUE
+  NONPROFIT
+  COMMUNITY_CENTER
+  OTHER
+}
+
 model Organization {
   id               String           @id @default(cuid())
   name             String
   slug             String           @unique
+  organizationType OrganizationType @default(OTHER)
   logo             String?
   email            String?
   phone            String?

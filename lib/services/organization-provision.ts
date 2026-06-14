@@ -1,11 +1,13 @@
 import {
   AuditAction,
   NotificationType,
+  OrganizationType,
   SubscriptionPlan,
   UserRole,
 } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
+import { slugifyOrganizationName } from "@/lib/signup/slug";
 
 const DEFAULT_TERMS = `By borrowing materials from this library, you agree to:
 • Return items by the due date in the same condition
@@ -42,16 +44,11 @@ const DEFAULT_NOTIFICATION_TEMPLATES = [
 ] as const;
 
 export function slugifyLibraryName(name: string): string {
-  return name
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 48);
+  return slugifyOrganizationName(name);
 }
 
 export async function generateUniqueSlug(baseName: string): Promise<string> {
-  const base = slugifyLibraryName(baseName) || "library";
+  const base = slugifyOrganizationName(baseName) || "library";
   let slug = base;
   let attempt = 0;
 
@@ -112,31 +109,43 @@ function defaultAppSettings(libraryName: string, contactEmail: string) {
 }
 
 export interface ProvisionOrganizationInput {
-  libraryName: string;
+  organizationName: string;
+  organizationType: OrganizationType;
   adminEmail: string;
   adminFullName: string;
+  logo?: string | null;
+  acceptNotifications?: boolean;
 }
 
 export async function provisionOrganization(input: ProvisionOrganizationInput) {
-  const slug = await generateUniqueSlug(input.libraryName);
+  const slug = await generateUniqueSlug(input.organizationName);
 
   const organization = await prisma.organization.create({
     data: {
-      name: input.libraryName.trim(),
+      name: input.organizationName.trim(),
       slug,
+      organizationType: input.organizationType,
+      logo: input.logo ?? null,
       email: input.adminEmail,
       subscriptionPlan: SubscriptionPlan.STARTER,
       termsContent: DEFAULT_TERMS,
     },
   });
 
+  const settings = [
+    ...defaultAppSettings(organization.name, input.adminEmail),
+    {
+      key: "account_notifications",
+      value: input.acceptNotifications ? "true" : "false",
+      description: "Account notification preference",
+    },
+  ] as const;
+
   await prisma.appSettings.createMany({
-    data: defaultAppSettings(organization.name, input.adminEmail).map(
-      (setting) => ({
-        organizationId: organization.id,
-        ...setting,
-      })
-    ),
+    data: settings.map((setting) => ({
+      organizationId: organization.id,
+      ...setting,
+    })),
   });
 
   await prisma.notificationTemplate.createMany({
@@ -158,6 +167,7 @@ export async function provisionOrganization(input: ProvisionOrganizationInput) {
         name: organization.name,
         slug: organization.slug,
         plan: organization.subscriptionPlan,
+        organizationType: organization.organizationType,
       },
     },
   });

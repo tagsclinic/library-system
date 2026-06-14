@@ -117,21 +117,55 @@ export const loginSchema = z.object({
   password: z.string().min(6, "Password must be at least 6 characters"),
 });
 
-export const signupSchema = z.object({
-  libraryName: z
-    .string()
-    .min(2, "Library name must be at least 2 characters")
-    .max(120),
-  fullName: z
-    .string()
-    .min(2, "Your name must be at least 2 characters")
-    .max(120),
-  email: z.string().email("Invalid email address"),
-  password: z
-    .string()
-    .min(8, "Password must be at least 8 characters")
-    .max(72),
-});
+const signupPasswordSchema = z
+  .string()
+  .min(8, "Password must be at least 8 characters")
+  .max(72)
+  .regex(/[A-Z]/, "Password must include an uppercase letter")
+  .regex(/[0-9]/, "Password must include a number")
+  .regex(/[^A-Za-z0-9]/, "Password must include a special character");
+
+export const signupOrganizationTypeSchema = z.enum([
+  "PUBLIC_LIBRARY",
+  "SCHOOL",
+  "PRIVATE_SCHOOL",
+  "CHURCH",
+  "MOSQUE",
+  "NONPROFIT",
+  "COMMUNITY_CENTER",
+  "OTHER",
+]);
+
+export const signupSchema = z
+  .object({
+    organizationName: z
+      .string()
+      .min(2, "Organization name must be at least 2 characters")
+      .max(120),
+    organizationType: signupOrganizationTypeSchema,
+    fullName: z
+      .string()
+      .min(2, "Your name must be at least 2 characters")
+      .max(120),
+    email: z.string().email("Invalid email address"),
+    password: signupPasswordSchema,
+    confirmPassword: z.string().min(1, "Please confirm your password"),
+    logo: z
+      .string()
+      .max(700_000, "Logo file is too large")
+      .optional()
+      .nullable(),
+    agreeToTerms: z.boolean().refine((val) => val === true, {
+      message: "You must agree to the Terms of Service",
+    }),
+    agreeToNotifications: z.boolean().refine((val) => val === true, {
+      message: "You must agree to receive account notifications",
+    }),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: "Passwords do not match",
+    path: ["confirmPassword"],
+  });
 
 export const searchSchema = z.object({
   q: z.string().min(1).max(200),

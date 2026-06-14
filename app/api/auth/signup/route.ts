@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Prisma, UserRole } from "@prisma/client";
+import { OrganizationType, Prisma, UserRole } from "@prisma/client";
 
 import {
   deleteOrganization,
@@ -8,6 +8,7 @@ import {
 } from "@/lib/services/organization-provision";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createSignupClient } from "@/lib/supabase/signup-client";
+import { getDatabaseConfigError } from "@/lib/db-config";
 import { signupSchema } from "@/lib/validations";
 
 function signupErrorMessage(error: unknown): string {
@@ -98,6 +99,11 @@ export async function POST(request: NextRequest) {
   let authUserId: string | null = null;
 
   try {
+    const configError = getDatabaseConfigError();
+    if (configError) {
+      return NextResponse.json({ error: configError }, { status: 503 });
+    }
+
     const body = await request.json();
     const parsed = signupSchema.safeParse(body);
 
@@ -108,13 +114,24 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { libraryName, fullName, email, password } = parsed.data;
+    const {
+      organizationName,
+      organizationType,
+      fullName,
+      email,
+      password,
+      logo,
+      agreeToNotifications,
+    } = parsed.data;
     const normalizedEmail = email.toLowerCase().trim();
 
     const organization = await provisionOrganization({
-      libraryName,
+      organizationName,
+      organizationType: organizationType as OrganizationType,
       adminEmail: normalizedEmail,
       adminFullName: fullName.trim(),
+      logo: logo ?? null,
+      acceptNotifications: agreeToNotifications,
     });
     organizationId = organization.id;
 
@@ -173,6 +190,7 @@ export async function POST(request: NextRequest) {
         data: {
           organizationId: organization.id,
           organizationName: organization.name,
+          organizationSlug: organization.slug,
           email: normalizedEmail,
           needsEmailConfirmation,
         },
