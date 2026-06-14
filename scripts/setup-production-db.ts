@@ -44,10 +44,18 @@ function validateDatabaseUrl(name: string, url: string | undefined): string[] {
   if (
     url.includes("[PASSWORD]") ||
     url.includes("[YOUR-PASSWORD]") ||
-    url.includes("[password]")
+    url.includes("[password]") ||
+    url.includes("YOUR-DB-PASSWORD")
   ) {
     errors.push(
       `${name} still contains a password placeholder — replace with your real Supabase database password`
+    );
+  }
+
+  const creds = url.match(/^postgres(?:ql)?:\/\/([^@/]+)/);
+  if (creds?.[1]?.includes("@")) {
+    errors.push(
+      `${name} password contains @ — encode it as %40 (e.g. Tagsclinic%402026)`
     );
   }
   if (name === "DATABASE_URL") {
