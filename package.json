@@ -16,6 +16,7 @@
     "auth:confirm": "tsx --env-file=.env.local scripts/confirm-auth-user.ts",
     "setup:production-db": "tsx --env-file=.env.local scripts/setup-production-db.ts",
     "setup:supabase-env": "tsx --env-file=.env.local scripts/sync-supabase-env.ts",
+    "validate:supabase-env": "tsx --env-file=.env.local scripts/validate-supabase-env.ts",
     "db:studio": "prisma studio"
   },
   "dependencies": {

@@ -24,6 +24,17 @@ export async function POST(request: NextRequest) {
     });
 
     if (error) {
+      if (error.message === "Invalid API key") {
+        console.error("Login failed: Supabase rejected the configured API key");
+        return NextResponse.json(
+          {
+            error:
+              "Sign-in is misconfigured on this server. Contact support or try again later.",
+          },
+          { status: 503 }
+        );
+      }
+
       const message =
         error.message === "Invalid login credentials"
           ? "Invalid email or password."
