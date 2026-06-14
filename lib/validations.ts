@@ -117,6 +117,22 @@ export const loginSchema = z.object({
   password: z.string().min(6, "Password must be at least 6 characters"),
 });
 
+export const signupSchema = z.object({
+  libraryName: z
+    .string()
+    .min(2, "Library name must be at least 2 characters")
+    .max(120),
+  fullName: z
+    .string()
+    .min(2, "Your name must be at least 2 characters")
+    .max(120),
+  email: z.string().email("Invalid email address"),
+  password: z
+    .string()
+    .min(8, "Password must be at least 8 characters")
+    .max(72),
+});
+
 export const searchSchema = z.object({
   q: z.string().min(1).max(200),
   type: z
@@ -139,3 +155,4 @@ export type CheckinInput = z.infer<typeof checkinSchema>;
 export type RenewalInput = z.infer<typeof renewalSchema>;
 export type AppSettingInput = z.infer<typeof appSettingSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
+export type SignupInput = z.infer<typeof signupSchema>;

@@ -22,7 +22,7 @@ export const PRICING = [
     period: "/month",
     description: "Perfect for small libraries and reading programs",
     features: ["Up to 2,000 books", "Unlimited borrowers", "Checkout & check-in", "Basic reports", "Email support"],
-    cta: "Start Free Trial",
+    cta: "Create Account",
     highlighted: false,
   },
   {
@@ -31,7 +31,7 @@ export const PRICING = [
     period: "/month",
     description: "For growing libraries and schools",
     features: ["Up to 10,000 books", "Advanced analytics", "SMS notifications", "Audit logs", "Priority support"],
-    cta: "Start Free Trial",
+    cta: "Create Account",
     highlighted: true,
   },
   {

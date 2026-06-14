@@ -61,7 +61,7 @@ export function Navbar() {
             className="bg-[#2563EB] hover:bg-[#1E40AF] shadow-sm"
             asChild
           >
-            <Link href="/login">Start Free Trial</Link>
+            <Link href="/signup">Create Account</Link>
           </Button>
         </div>
       </nav>

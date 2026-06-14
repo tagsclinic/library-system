@@ -14,8 +14,7 @@ export function Pricing() {
             Simple, transparent pricing
           </h2>
           <p className="mt-4 text-lg text-slate-600">
-            Start with a free trial on any plan. Scale as your collection
-            grows.
+            Create a free account on any plan. Scale as your collection grows.
           </p>
         </div>
 
@@ -70,7 +69,7 @@ export function Pricing() {
                 {plan.cta === "Request Demo" ? (
                   <a href="mailto:hello@libraryinventory.com">{plan.cta}</a>
                 ) : (
-                  <Link href="/login">{plan.cta}</Link>
+                  <Link href="/signup">{plan.cta}</Link>
                 )}
               </Button>
             </div>

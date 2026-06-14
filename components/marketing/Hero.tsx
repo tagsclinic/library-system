@@ -32,8 +32,8 @@ export function Hero() {
               className="h-12 min-w-[200px] bg-[#2563EB] px-8 text-base shadow-md hover:bg-[#1E40AF]"
               asChild
             >
-              <Link href="/login">
-                Start Free Trial
+              <Link href="/signup">
+                Create Account
                 <ArrowRight className="ml-1 h-4 w-4" />
               </Link>
             </Button>
@@ -51,7 +51,7 @@ export function Hero() {
           </div>
 
           <p className="mt-6 text-sm text-slate-500">
-            No credit card required · 14-day free trial · Cancel anytime
+            Free to get started · No credit card required
           </p>
         </div>
 

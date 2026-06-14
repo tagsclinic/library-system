@@ -2,14 +2,14 @@
 
 import { Suspense, useState } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ArrowLeft, BookOpen, Loader2 } from "lucide-react";
 
 import { BRAND } from "@/lib/brand";
 import { createClient } from "@/lib/supabase/client";
-import { loginSchema, type LoginInput } from "@/lib/validations";
+import { signupSchema, type SignupInput } from "@/lib/validations";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -29,46 +29,73 @@ import {
 } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
 
-function LoginForm() {
+function SignupForm() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
 
-  const form = useForm<LoginInput>({
-    resolver: zodResolver(loginSchema),
-    defaultValues: { email: "", password: "" },
+  const form = useForm<SignupInput>({
+    resolver: zodResolver(signupSchema),
+    defaultValues: {
+      libraryName: "",
+      fullName: "",
+      email: "",
+      password: "",
+    },
   });
 
-  async function onSubmit(values: LoginInput) {
+  async function onSubmit(values: SignupInput) {
     setLoading(true);
-    const supabase = createClient();
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email: values.email,
-      password: values.password,
-    });
+    try {
+      const res = await fetch("/api/auth/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(values),
+      });
 
-    setLoading(false);
+      const data = await res.json();
 
-    if (error) {
-      const description =
-        error.message === "Invalid login credentials"
-          ? "Invalid email or password. Check your credentials or create an account."
-          : error.message;
+      if (!res.ok) {
+        toast({
+          variant: "destructive",
+          title: "Sign up failed",
+          description: data.error ?? "Could not create your account.",
+        });
+        setLoading(false);
+        return;
+      }
+
+      const supabase = createClient();
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: values.email,
+        password: values.password,
+      });
+
+      if (signInError) {
+        toast({
+          title: "Account created",
+          description: "Please sign in with your new credentials.",
+        });
+        router.push("/login");
+        return;
+      }
 
       toast({
-        variant: "destructive",
-        title: "Login failed",
-        description,
+        title: "Welcome to LibraryInventory",
+        description: `${data.data?.organizationName ?? "Your library"} is ready.`,
       });
-      return;
+      router.push("/dashboard");
+      router.refresh();
+    } catch {
+      toast({
+        variant: "destructive",
+        title: "Sign up failed",
+        description: "Something went wrong. Please try again.",
+      });
+    } finally {
+      setLoading(false);
     }
-
-    toast({ title: "Welcome back", description: "Signed in successfully." });
-    const redirectTo = searchParams.get("redirectTo") ?? "/dashboard";
-    router.push(redirectTo);
-    router.refresh();
   }
 
   return (
@@ -86,12 +113,48 @@ function LoginForm() {
           <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
             <BookOpen className="h-6 w-6 text-primary" />
           </div>
-          <CardTitle className="text-2xl">{BRAND.name}</CardTitle>
-          <CardDescription>{BRAND.tagline}</CardDescription>
+          <CardTitle className="text-2xl">Create your library account</CardTitle>
+          <CardDescription>
+            Set up your organization and admin login — free to get started.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+              <FormField
+                control={form.control}
+                name="libraryName"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Library name</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="Greenwood Community Library"
+                        autoComplete="organization"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="fullName"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Your name</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="Jane Smith"
+                        autoComplete="name"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
               <FormField
                 control={form.control}
                 name="email"
@@ -101,7 +164,7 @@ function LoginForm() {
                     <FormControl>
                       <Input
                         type="email"
-                        placeholder="admin@library.com"
+                        placeholder="you@library.org"
                         autoComplete="email"
                         {...field}
                       />
@@ -119,7 +182,7 @@ function LoginForm() {
                     <FormControl>
                       <Input
                         type="password"
-                        autoComplete="current-password"
+                        autoComplete="new-password"
                         {...field}
                       />
                     </FormControl>
@@ -131,20 +194,17 @@ function LoginForm() {
                 {loading ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Signing in...
+                    Creating account...
                   </>
                 ) : (
-                  "Sign in"
+                  "Create account"
                 )}
               </Button>
               <p className="text-center text-sm text-muted-foreground">
-                Don&apos;t have an account?{" "}
-                <Link href="/signup" className="text-primary hover:underline">
-                  Create one
+                Already have an account?{" "}
+                <Link href="/login" className="text-primary hover:underline">
+                  Sign in
                 </Link>
-              </p>
-              <p className="text-center text-xs text-muted-foreground">
-                Demo: admin@library.com / admin123
               </p>
             </form>
           </Form>
@@ -154,7 +214,7 @@ function LoginForm() {
   );
 }
 
-export default function LoginPage() {
+export default function SignupPage() {
   return (
     <Suspense
       fallback={
@@ -163,7 +223,7 @@ export default function LoginPage() {
         </div>
       }
     >
-      <LoginForm />
+      <SignupForm />
     </Suspense>
   );
 }
