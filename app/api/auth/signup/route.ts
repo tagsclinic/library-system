@@ -7,7 +7,6 @@ import {
   provisionOrganization,
 } from "@/lib/services/organization-provision";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { createSignupClient } from "@/lib/supabase/signup-client";
 import { getDatabaseConfigError } from "@/lib/db-config";
 import { signupApiSchema } from "@/lib/validations";
 
@@ -63,33 +62,22 @@ async function createAuthUser(input: {
 }) {
   const adminKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-  if (adminKey) {
-    const admin = createAdminClient();
-    return admin.auth.admin.createUser({
-      email: input.email,
-      password: input.password,
-      email_confirm: true,
-      user_metadata: {
-        organization_id: input.organizationId,
-        role: UserRole.ADMIN,
-        full_name: input.fullName,
-      },
-    });
+  if (!adminKey) {
+    throw new Error(
+      "SUPABASE_SERVICE_ROLE_KEY is required for account signup"
+    );
   }
 
-  const auth = createSignupClient();
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+  const admin = createAdminClient();
 
-  return auth.auth.signUp({
+  return admin.auth.admin.createUser({
     email: input.email,
     password: input.password,
-    options: {
-      data: {
-        organization_id: input.organizationId,
-        role: UserRole.ADMIN,
-        full_name: input.fullName,
-      },
-      ...(appUrl ? { emailRedirectTo: `${appUrl}/login` } : {}),
+    email_confirm: true,
+    user_metadata: {
+      organization_id: input.organizationId,
+      role: UserRole.ADMIN,
+      full_name: input.fullName,
     },
   });
 }
@@ -185,8 +173,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const needsEmailConfirmation =
-      "session" in authData ? authData.session == null : false;
+    const needsEmailConfirmation = !authData.user.email_confirmed_at;
 
     return NextResponse.json(
       {
@@ -196,6 +183,7 @@ export async function POST(request: NextRequest) {
           organizationSlug: organization.slug,
           email: normalizedEmail,
           needsEmailConfirmation,
+          canSignInImmediately: !!authData.user.email_confirmed_at,
         },
       },
       { status: 201 }

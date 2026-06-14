@@ -50,7 +50,15 @@ async function getDashboardData(): Promise<DashboardData> {
   });
 
   if (!res.ok) {
-    throw new Error("Failed to load dashboard data");
+    const body = await res.json().catch(() => ({}));
+    const message =
+      body.error ??
+      (res.status === 401
+        ? "Your session expired. Please sign in again."
+        : res.status === 403
+          ? "Your account is not linked to an organization. Contact support."
+          : "Failed to load dashboard data");
+    throw new Error(message);
   }
 
   const json = await res.json();

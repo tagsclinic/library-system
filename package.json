@@ -13,6 +13,7 @@
     "db:migrate": "prisma migrate deploy",
     "db:seed": "tsx prisma/seed.ts",
     "auth:seed": "tsx --env-file=.env.local scripts/seed-auth-users.ts",
+    "auth:confirm": "tsx --env-file=.env.local scripts/confirm-auth-user.ts",
     "setup:production-db": "tsx --env-file=.env.local scripts/setup-production-db.ts",
     "db:studio": "prisma studio"
   },

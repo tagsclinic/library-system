@@ -127,7 +127,7 @@ function SignupForm() {
         return;
       }
 
-      if (data.data?.needsEmailConfirmation) {
+      if (data.data?.needsEmailConfirmation && !data.data?.canSignInImmediately) {
         setVerificationEmail(data.data.email);
         setVerificationOrgName(data.data.organizationName);
         return;
@@ -135,13 +135,19 @@ function SignupForm() {
 
       const supabase = createClient();
       const { error: signInError } = await supabase.auth.signInWithPassword({
-        email: values.email,
+        email: values.email.toLowerCase().trim(),
         password: values.password,
       });
 
       if (signInError) {
-        setVerificationEmail(values.email);
-        setVerificationOrgName(data.data?.organizationName);
+        toast({
+          title: "Account created",
+          description:
+            signInError.message.toLowerCase().includes("email not confirmed")
+              ? "Sign in and tap “Confirm my email” on the login page."
+              : "Please sign in with your new credentials.",
+        });
+        router.push("/login");
         return;
       }
 
