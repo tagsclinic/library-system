@@ -120,50 +120,49 @@ export interface ProvisionOrganizationInput {
 export async function provisionOrganization(input: ProvisionOrganizationInput) {
   const slug = await generateUniqueSlug(input.libraryName);
 
-  return prisma.$transaction(async (tx) => {
-    const organization = await tx.organization.create({
-      data: {
-        name: input.libraryName.trim(),
-        slug,
-        email: input.adminEmail,
-        subscriptionPlan: SubscriptionPlan.STARTER,
-        termsContent: DEFAULT_TERMS,
-      },
-    });
-
-    for (const setting of defaultAppSettings(
-      organization.name,
-      input.adminEmail
-    )) {
-      await tx.appSettings.create({
-        data: { organizationId: organization.id, ...setting },
-      });
-    }
-
-    for (const template of DEFAULT_NOTIFICATION_TEMPLATES) {
-      await tx.notificationTemplate.create({
-        data: { organizationId: organization.id, ...template },
-      });
-    }
-
-    await tx.auditLog.create({
-      data: {
-        organizationId: organization.id,
-        action: AuditAction.CREATE,
-        entityType: "Organization",
-        entityId: organization.id,
-        description: `Library account created: ${organization.name}`,
-        userEmail: input.adminEmail,
-        newData: {
-          name: organization.name,
-          slug: organization.slug,
-          plan: organization.subscriptionPlan,
-        },
-      },
-    });
-
-    return organization;
+  const organization = await prisma.organization.create({
+    data: {
+      name: input.libraryName.trim(),
+      slug,
+      email: input.adminEmail,
+      subscriptionPlan: SubscriptionPlan.STARTER,
+      termsContent: DEFAULT_TERMS,
+    },
   });
+
+  await prisma.appSettings.createMany({
+    data: defaultAppSettings(organization.name, input.adminEmail).map(
+      (setting) => ({
+        organizationId: organization.id,
+        ...setting,
+      })
+    ),
+  });
+
+  await prisma.notificationTemplate.createMany({
+    data: DEFAULT_NOTIFICATION_TEMPLATES.map((template) => ({
+      organizationId: organization.id,
+      ...template,
+    })),
+  });
+
+  await prisma.auditLog.create({
+    data: {
+      organizationId: organization.id,
+      action: AuditAction.CREATE,
+      entityType: "Organization",
+      entityId: organization.id,
+      description: `Library account created: ${organization.name}`,
+      userEmail: input.adminEmail,
+      newData: {
+        name: organization.name,
+        slug: organization.slug,
+        plan: organization.subscriptionPlan,
+      },
+    },
+  });
+
+  return organization;
 }
 
 export async function deleteOrganization(organizationId: string) {

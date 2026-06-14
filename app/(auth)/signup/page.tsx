@@ -66,6 +66,16 @@ function SignupForm() {
         return;
       }
 
+      if (data.data?.needsEmailConfirmation) {
+        toast({
+          title: "Check your email",
+          description:
+            "We sent a confirmation link. After confirming, sign in to access your library dashboard.",
+        });
+        router.push("/login");
+        return;
+      }
+
       const supabase = createClient();
       const { error: signInError } = await supabase.auth.signInWithPassword({
         email: values.email,
