@@ -9,7 +9,7 @@ import {
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createSignupClient } from "@/lib/supabase/signup-client";
 import { getDatabaseConfigError } from "@/lib/db-config";
-import { signupSchema } from "@/lib/validations";
+import { signupApiSchema } from "@/lib/validations";
 
 function signupErrorMessage(error: unknown): string {
   if (error instanceof Prisma.PrismaClientInitializationError) {
@@ -105,13 +105,16 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const parsed = signupSchema.safeParse(body);
+    const parsed = signupApiSchema.safeParse(body);
 
     if (!parsed.success) {
-      return NextResponse.json(
-        { error: parsed.error.errors[0]?.message ?? "Invalid input" },
-        { status: 400 }
-      );
+      const issue = parsed.error.errors[0];
+      const field = issue?.path.join(".") || "input";
+      const message =
+        issue?.message && issue.message !== "Required"
+          ? issue.message
+          : `Missing or invalid field: ${field}`;
+      return NextResponse.json({ error: message }, { status: 400 });
     }
 
     const {

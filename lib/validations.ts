@@ -136,36 +136,43 @@ export const signupOrganizationTypeSchema = z.enum([
   "OTHER",
 ]);
 
-export const signupSchema = z
-  .object({
-    organizationName: z
-      .string()
-      .min(2, "Organization name must be at least 2 characters")
-      .max(120),
-    organizationType: signupOrganizationTypeSchema,
-    fullName: z
-      .string()
-      .min(2, "Your name must be at least 2 characters")
-      .max(120),
-    email: z.string().email("Invalid email address"),
-    password: signupPasswordSchema,
+const signupFieldsSchema = z.object({
+  organizationName: z
+    .string()
+    .min(2, "Organization name must be at least 2 characters")
+    .max(120),
+  organizationType: signupOrganizationTypeSchema,
+  fullName: z
+    .string()
+    .min(2, "Your name must be at least 2 characters")
+    .max(120),
+  email: z.string().email("Invalid email address"),
+  password: signupPasswordSchema,
+  logo: z
+    .string()
+    .max(700_000, "Logo file is too large")
+    .optional()
+    .nullable(),
+  agreeToTerms: z.boolean().refine((val) => val === true, {
+    message: "You must agree to the Terms of Service",
+  }),
+  agreeToNotifications: z.boolean().refine((val) => val === true, {
+    message: "You must agree to receive account notifications",
+  }),
+});
+
+/** Client form schema — includes confirmPassword match check. */
+export const signupSchema = signupFieldsSchema
+  .extend({
     confirmPassword: z.string().min(1, "Please confirm your password"),
-    logo: z
-      .string()
-      .max(700_000, "Logo file is too large")
-      .optional()
-      .nullable(),
-    agreeToTerms: z.boolean().refine((val) => val === true, {
-      message: "You must agree to the Terms of Service",
-    }),
-    agreeToNotifications: z.boolean().refine((val) => val === true, {
-      message: "You must agree to receive account notifications",
-    }),
   })
   .refine((data) => data.password === data.confirmPassword, {
     message: "Passwords do not match",
     path: ["confirmPassword"],
   });
+
+/** Server API schema — confirmPassword is validated client-side only. */
+export const signupApiSchema = signupFieldsSchema;
 
 export const searchSchema = z.object({
   q: z.string().min(1).max(200),
@@ -190,3 +197,4 @@ export type RenewalInput = z.infer<typeof renewalSchema>;
 export type AppSettingInput = z.infer<typeof appSettingSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type SignupInput = z.infer<typeof signupSchema>;
+export type SignupApiInput = z.infer<typeof signupApiSchema>;
