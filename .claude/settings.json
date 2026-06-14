@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run *)",
+      "Bash(npm install *)",
+      "Bash(npx prisma *)",
+      "Bash(npx next *)",
+      "Bash(npx tsc *)",
+      "Bash(git status)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(git add *)",
+      "Bash(git commit -m *)",
+      "Bash(curl -s http://localhost:3000*)"
+    ]
+  }
+}
