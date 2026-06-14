@@ -8,7 +8,6 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { ArrowLeft, BookOpen, Loader2, Mail } from "lucide-react";
 
 import { BRAND } from "@/lib/brand";
-import { createClient } from "@/lib/supabase/client";
 import { loginSchema, type LoginInput } from "@/lib/validations";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,17 +28,6 @@ import {
 } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
 
-function loginErrorMessage(error: string): string {
-  const lower = error.toLowerCase();
-  if (error === "Invalid login credentials") {
-    return "Invalid email or password. Check your credentials or create an account.";
-  }
-  if (lower.includes("email not confirmed")) {
-    return "Your email is not verified yet. Use “Confirm my email” below — no inbox required.";
-  }
-  return error;
-}
-
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -54,7 +42,7 @@ function LoginForm() {
     defaultValues: { email: "", password: "" },
   });
 
-  async function handleResendVerification(email: string) {
+  async function handleConfirmEmail(email: string) {
     setResending(true);
     try {
       const res = await fetch("/api/auth/resend-verification", {
@@ -67,20 +55,18 @@ function LoginForm() {
       if (!res.ok) {
         toast({
           variant: "destructive",
-          title: "Could not verify email",
+          title: "Could not confirm email",
           description: data.error ?? "Please try again.",
         });
         return;
       }
 
       toast({
-        title: data.data?.confirmed ? "Email confirmed" : "Check your email",
+        title: data.data?.confirmed ? "Ready to sign in" : "Check your email",
         description: data.data?.message,
       });
 
-      if (data.data?.confirmed) {
-        setShowResend(false);
-      }
+      if (data.data?.confirmed) setShowResend(false);
     } catch {
       toast({
         variant: "destructive",
@@ -95,32 +81,45 @@ function LoginForm() {
   async function onSubmit(values: LoginInput) {
     setLoading(true);
     setLastEmail(values.email);
-    const supabase = createClient();
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email: values.email.toLowerCase().trim(),
-      password: values.password,
-    });
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: values.email.toLowerCase().trim(),
+          password: values.password,
+        }),
+      });
 
-    setLoading(false);
+      const data = await res.json();
 
-    if (error) {
-      const description = loginErrorMessage(error.message);
-      const needsVerify = error.message.toLowerCase().includes("email not confirmed");
-      setShowResend(needsVerify);
+      if (!res.ok) {
+        const description = data.error ?? "Sign in failed.";
+        const needsVerify = description.toLowerCase().includes("not confirmed");
+        setShowResend(needsVerify);
 
+        toast({
+          variant: "destructive",
+          title: "Login failed",
+          description,
+        });
+        return;
+      }
+
+      toast({ title: "Welcome back", description: "Signed in successfully." });
+      const redirectTo = searchParams.get("redirectTo") ?? "/dashboard";
+      router.push(redirectTo);
+      router.refresh();
+    } catch {
       toast({
         variant: "destructive",
         title: "Login failed",
-        description,
+        description: "Something went wrong. Please try again.",
       });
-      return;
+    } finally {
+      setLoading(false);
     }
-
-    toast({ title: "Welcome back", description: "Signed in successfully." });
-    const redirectTo = searchParams.get("redirectTo") ?? "/dashboard";
-    router.push(redirectTo);
-    router.refresh();
   }
 
   const callbackError = searchParams.get("message");
@@ -205,7 +204,7 @@ function LoginForm() {
                   className="w-full"
                   disabled={resending}
                   onClick={() =>
-                    void handleResendVerification(
+                    void handleConfirmEmail(
                       form.getValues("email") || lastEmail
                     )
                   }

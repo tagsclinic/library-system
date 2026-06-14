@@ -14,7 +14,6 @@ import {
   X,
 } from "lucide-react";
 
-import { EmailVerificationBanner } from "@/components/auth/EmailVerificationBanner";
 import { LogoUpload } from "@/components/auth/LogoUpload";
 import { PasswordInput } from "@/components/auth/PasswordInput";
 import { PasswordStrengthMeter } from "@/components/auth/PasswordStrengthMeter";
@@ -39,7 +38,6 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { BRAND } from "@/lib/brand";
-import { createClient } from "@/lib/supabase/client";
 import {
   ORGANIZATION_NAME_EXAMPLES,
   ORGANIZATION_TYPES,
@@ -68,10 +66,6 @@ function SignupForm() {
   const { toast } = useToast();
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
-  const [verificationEmail, setVerificationEmail] = useState<string | null>(
-    null
-  );
-  const [verificationOrgName, setVerificationOrgName] = useState<string>();
 
   const form = useForm<SignupInput>({
     resolver: zodResolver(signupSchema),
@@ -127,25 +121,22 @@ function SignupForm() {
         return;
       }
 
-      if (data.data?.needsEmailConfirmation && !data.data?.canSignInImmediately) {
-        setVerificationEmail(data.data.email);
-        setVerificationOrgName(data.data.organizationName);
-        return;
-      }
-
-      const supabase = createClient();
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email: values.email.toLowerCase().trim(),
-        password: values.password,
+      const loginRes = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: values.email.toLowerCase().trim(),
+          password: values.password,
+        }),
       });
 
-      if (signInError) {
+      if (!loginRes.ok) {
+        const loginData = await loginRes.json();
         toast({
           title: "Account created",
           description:
-            signInError.message.toLowerCase().includes("email not confirmed")
-              ? "Sign in and tap “Confirm my email” on the login page."
-              : "Please sign in with your new credentials.",
+            loginData.error ??
+            "Your workspace is ready. Please sign in.",
         });
         router.push("/login");
         return;
@@ -166,17 +157,6 @@ function SignupForm() {
     } finally {
       setLoading(false);
     }
-  }
-
-  if (verificationEmail) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-muted/40 p-4">
-        <EmailVerificationBanner
-          email={verificationEmail}
-          organizationName={verificationOrgName}
-        />
-      </div>
-    );
   }
 
   return (

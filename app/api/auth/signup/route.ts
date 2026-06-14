@@ -173,8 +173,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const needsEmailConfirmation = !authData.user.email_confirmed_at;
-
     return NextResponse.json(
       {
         data: {
@@ -182,8 +180,6 @@ export async function POST(request: NextRequest) {
           organizationName: organization.name,
           organizationSlug: organization.slug,
           email: normalizedEmail,
-          needsEmailConfirmation,
-          canSignInImmediately: !!authData.user.email_confirmed_at,
         },
       },
       { status: 201 }
