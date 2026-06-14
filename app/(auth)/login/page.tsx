@@ -52,10 +52,15 @@ function LoginForm() {
     setLoading(false);
 
     if (error) {
+      const description =
+        error.message === "Invalid login credentials"
+          ? "No matching account. Create users in Supabase (Authentication → Users) or run: npm run auth:seed"
+          : error.message;
+
       toast({
         variant: "destructive",
         title: "Login failed",
-        description: error.message,
+        description,
       });
       return;
     }
@@ -132,6 +137,9 @@ function LoginForm() {
                   "Sign in"
                 )}
               </Button>
+              <p className="text-center text-xs text-muted-foreground">
+                Demo: admin@library.com / admin123
+              </p>
             </form>
           </Form>
         </CardContent>
