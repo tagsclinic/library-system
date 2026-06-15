@@ -86,6 +86,10 @@ enum UserRole {
   VIEWER
 }
 
+enum PlatformRole {
+  SUPER_ADMIN
+}
+
 enum AuditAction {
   CREATE
   UPDATE
@@ -141,8 +145,36 @@ model Organization {
   auditLogs                AuditLog[]
   appSettings              AppSettings[]
   members                  OrganizationMember[]
+  integration              OrganizationIntegration?
 
   @@index([slug])
+}
+
+model OrganizationIntegration {
+  id                    String    @id @default(cuid())
+  organizationId        String    @unique
+  googleRefreshToken    String?   @db.Text
+  googleAccessToken     String?   @db.Text
+  googleTokenExpiry     DateTime?
+  googleAccountEmail    String?
+  googleDriveFolderId   String?
+  googleDriveFolderName String?   @default("LibraryInventory")
+  googleConnectedAt     DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+}
+
+model PlatformUser {
+  id        String       @id @default(cuid())
+  userId    String       @unique
+  email     String
+  role      PlatformRole @default(SUPER_ADMIN)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  @@index([email])
 }
 
 model OrganizationMember {

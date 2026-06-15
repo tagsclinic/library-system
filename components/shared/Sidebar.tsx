@@ -39,6 +39,7 @@ interface SidebarProps {
   userName?: string;
   userEmail?: string;
   notificationCount?: number;
+  showPlatformLink?: boolean;
 }
 
 export function Sidebar({
@@ -47,6 +48,7 @@ export function Sidebar({
   userName,
   userEmail,
   notificationCount = 0,
+  showPlatformLink = false,
 }: SidebarProps) {
   const pathname = usePathname();
 
@@ -76,6 +78,12 @@ export function Sidebar({
       label: "Settings",
       icon: Settings,
       show: canManageSettings(role),
+    },
+    {
+      href: "/platform",
+      label: "Platform Admin",
+      icon: Shield,
+      show: showPlatformLink,
     },
   ];
 

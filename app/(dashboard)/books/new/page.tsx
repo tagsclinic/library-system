@@ -6,6 +6,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2 } from "lucide-react";
 
+import { CoverImageUpload } from "@/components/books/CoverImageUpload";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -257,6 +258,31 @@ export default function NewBookPage() {
                   )}
                 />
               </div>
+
+              <FormField
+                control={form.control}
+                name="coverImageUrl"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Cover photo</FormLabel>
+                    <FormControl>
+                      <CoverImageUpload
+                        value={field.value}
+                        onChange={field.onChange}
+                        onError={(message) =>
+                          toast({
+                            variant: "destructive",
+                            title: "Cover upload failed",
+                            description: message,
+                          })
+                        }
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
               <FormField
                 control={form.control}
                 name="notes"

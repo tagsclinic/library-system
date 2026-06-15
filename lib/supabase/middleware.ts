@@ -1,6 +1,8 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
+import { getOrganizationId } from "@/lib/organization";
+import { isSuperAdmin } from "@/lib/platform";
 import { getSupabasePublishableKey, getSupabaseUrl } from "@/lib/supabase/env";
 
 export async function updateSession(request: NextRequest) {
@@ -42,6 +44,8 @@ export async function updateSession(request: NextRequest) {
     pathname.startsWith("/login") ||
     pathname.startsWith("/signup") ||
     pathname.startsWith("/auth/");
+  const isPlatformRoute =
+    pathname.startsWith("/platform") || pathname.startsWith("/api/platform");
   const isProtectedRoute =
     pathname.startsWith("/dashboard") ||
     pathname.startsWith("/books") ||
@@ -54,6 +58,7 @@ export async function updateSession(request: NextRequest) {
     pathname.startsWith("/notifications") ||
     pathname.startsWith("/audit") ||
     pathname.startsWith("/settings") ||
+    isPlatformRoute ||
     (pathname.startsWith("/api") && !pathname.startsWith("/api/auth"));
 
   if (!user && isProtectedRoute) {
@@ -63,9 +68,22 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  if (user && isAuthRoute) {
+  if (user && isPlatformRoute && !isSuperAdmin(user)) {
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
     const url = request.nextUrl.clone();
     url.pathname = "/dashboard";
+    return NextResponse.redirect(url);
+  }
+
+  if (user && isAuthRoute) {
+    const url = request.nextUrl.clone();
+    if (isSuperAdmin(user) && !getOrganizationId(user)) {
+      url.pathname = "/platform";
+    } else {
+      url.pathname = "/dashboard";
+    }
     return NextResponse.redirect(url);
   }
 

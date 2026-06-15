@@ -7,6 +7,7 @@ import {
   LoanPeriodType,
   LoanStatus,
   PaymentStatus,
+  UserRole,
 } from "@prisma/client";
 
 export const bookSchema = z.object({
@@ -185,6 +186,59 @@ export const searchSchema = z.object({
 export const paginationSchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
+});
+
+export const platformOrganizationUpdateSchema = z.object({
+  name: z.string().min(2).max(120).optional(),
+  subscriptionPlan: z
+    .enum(["STARTER", "PROFESSIONAL", "ENTERPRISE"])
+    .optional(),
+  suspended: z.boolean().optional(),
+});
+
+export const platformUserCreateSchema = z
+  .object({
+    email: z.string().email("Invalid email address"),
+    password: z.string().min(8, "Password must be at least 8 characters").max(72),
+    fullName: z.string().min(2, "Name is required").max(120),
+    organizationId: z.string().cuid().optional().nullable(),
+    role: z.nativeEnum(UserRole).optional(),
+    isSuperAdmin: z.boolean().optional().default(false),
+  })
+  .refine(
+    (data) => data.isSuperAdmin || !!data.organizationId,
+    {
+      message: "Organization is required for non-super-admin users",
+      path: ["organizationId"],
+    }
+  )
+  .refine(
+    (data) => data.isSuperAdmin || !!data.role,
+    {
+      message: "Role is required for organization users",
+      path: ["role"],
+    }
+  );
+
+export const platformUserUpdateSchema = z.object({
+  fullName: z.string().min(2).max(120).optional(),
+  organizationId: z.string().cuid().optional().nullable(),
+  role: z.nativeEnum(UserRole).optional(),
+  password: z.string().min(8).max(72).optional(),
+  isSuperAdmin: z.boolean().optional(),
+});
+
+export const orgMemberCreateSchema = z.object({
+  email: z.string().email("Invalid email address"),
+  password: z.string().min(8, "Password must be at least 8 characters").max(72),
+  fullName: z.string().min(2, "Name is required").max(120),
+  role: z.nativeEnum(UserRole),
+});
+
+export const orgMemberUpdateSchema = z.object({
+  fullName: z.string().min(2).max(120).optional(),
+  role: z.nativeEnum(UserRole).optional(),
+  password: z.string().min(8).max(72).optional(),
 });
 
 export type BookInput = z.infer<typeof bookSchema>;

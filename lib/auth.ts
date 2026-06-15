@@ -2,6 +2,10 @@ import type { User } from "@supabase/supabase-js";
 
 import { UserRole } from "@prisma/client";
 
+import { isSuperAdmin } from "@/lib/platform";
+
+export { isSuperAdmin } from "@/lib/platform";
+
 export function getUserRole(user: User): UserRole {
   const role =
     (user.user_metadata?.role as string | undefined) ??
@@ -68,6 +72,10 @@ export function canViewAudit(role: UserRole): boolean {
 
 export function canManageSettings(role: UserRole): boolean {
   return role === UserRole.ADMIN;
+}
+
+export function canManagePlatform(user: User): boolean {
+  return isSuperAdmin(user);
 }
 
 export function canViewDashboard(role: UserRole): boolean {

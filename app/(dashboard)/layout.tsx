@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { NotificationStatus } from "@prisma/client";
 
 import { createClient } from "@/lib/supabase/server";
-import { getUserDisplayName, getUserRole } from "@/lib/auth";
+import { getUserDisplayName, getUserRole, isSuperAdmin } from "@/lib/auth";
 import { getOrganizationForUser } from "@/lib/organization";
 import { prisma } from "@/lib/prisma";
 import { Sidebar } from "@/components/shared/Sidebar";
@@ -26,6 +26,9 @@ export default async function DashboardLayout({
   const organization = await getOrganizationForUser(user);
 
   if (!organization) {
+    if (isSuperAdmin(user)) {
+      redirect("/platform");
+    }
     redirect("/login");
   }
 
@@ -44,6 +47,7 @@ export default async function DashboardLayout({
         userName={getUserDisplayName(user)}
         userEmail={user.email}
         notificationCount={notificationCount}
+        showPlatformLink={isSuperAdmin(user)}
       />
       <div className="ml-0 flex min-h-screen flex-col md:ml-[280px]">
         <Topbar

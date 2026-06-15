@@ -108,7 +108,12 @@ function LoginForm() {
       }
 
       toast({ title: "Welcome back", description: "Signed in successfully." });
-      const redirectTo = searchParams.get("redirectTo") ?? "/dashboard";
+      const redirectParam = searchParams.get("redirectTo");
+      const defaultPath =
+        data.data?.isSuperAdmin && !data.data?.hasOrganization
+          ? "/platform"
+          : "/dashboard";
+      const redirectTo = redirectParam ?? defaultPath;
       router.push(redirectTo);
       router.refresh();
     } catch {

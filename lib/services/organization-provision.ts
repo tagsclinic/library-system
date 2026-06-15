@@ -180,6 +180,7 @@ export async function deleteOrganization(organizationId: string) {
   await prisma.appSettings.deleteMany({ where: { organizationId } });
   await prisma.auditLog.deleteMany({ where: { organizationId } });
   await prisma.organizationMember.deleteMany({ where: { organizationId } });
+  await prisma.organizationIntegration.deleteMany({ where: { organizationId } });
   await prisma.organization.delete({ where: { id: organizationId } });
 }
 

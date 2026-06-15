@@ -1,9 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
 import type { User } from "@supabase/supabase-js";
-import { Prisma, type UserRole } from "@prisma/client";
+import { Prisma, UserRole } from "@prisma/client";
 
 import { getUserRole } from "@/lib/auth";
 import { getOrganizationId, requireOrganization } from "@/lib/organization";
+import { isSuperAdmin } from "@/lib/platform";
 import { markOverdueLoans } from "@/lib/overdue";
 import { prisma } from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
@@ -13,6 +14,34 @@ export type AuthContext = {
   role: UserRole;
   organizationId: string;
 };
+
+export async function requirePlatformAuth(): Promise<
+  { user: User } | NextResponse
+> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+    error,
+  } = await supabase.auth.getUser();
+
+  if (error || !user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  if (!isSuperAdmin(user)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  const platformUser = await prisma.platformUser.findUnique({
+    where: { userId: user.id },
+  });
+
+  if (!platformUser) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  return { user };
+}
 
 export async function requireAuth(): Promise<AuthContext | NextResponse> {
   const supabase = await createClient();
@@ -44,8 +73,19 @@ export async function requireAuth(): Promise<AuthContext | NextResponse> {
   return { user, role: getUserRole(user), organizationId };
 }
 
+export async function requireOrgAdmin(): Promise<AuthContext | NextResponse> {
+  const auth = await requireAuth();
+  if (isErrorResponse(auth)) return auth;
+
+  if (auth.role !== UserRole.ADMIN) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  return auth;
+}
+
 export function isErrorResponse(
-  value: AuthContext | NextResponse
+  value: AuthContext | { user: User } | NextResponse
 ): value is NextResponse {
   return value instanceof NextResponse;
 }

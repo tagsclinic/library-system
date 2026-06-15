@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { createClient } from "@/lib/supabase/server";
 import { loginSchema } from "@/lib/validations";
+import { getOrganizationId } from "@/lib/organization";
+import { isSuperAdmin } from "@/lib/platform";
 
 export async function POST(request: NextRequest) {
   try {
@@ -49,6 +51,8 @@ export async function POST(request: NextRequest) {
       data: {
         userId: data.user?.id,
         email: data.user?.email,
+        isSuperAdmin: data.user ? isSuperAdmin(data.user) : false,
+        hasOrganization: data.user ? !!getOrganizationId(data.user) : false,
       },
     });
   } catch (error) {
