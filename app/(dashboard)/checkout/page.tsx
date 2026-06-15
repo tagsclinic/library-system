@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
@@ -29,9 +30,10 @@ import {
   FormDescription,
 } from "@/components/ui/form";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
 import { checkoutSchema, type CheckoutInput } from "@/lib/validations";
-import { formatDate, calculateDueDate } from "@/lib/utils";
+import { formatApiError, formatDate, calculateDueDate } from "@/lib/utils";
 import { BookCondition, LoanPeriodType } from "@/types";
 
 const STEPS = ["Borrower", "Book", "Loan Period", "Review & T&C"];
@@ -48,6 +50,7 @@ interface BookOption {
   author: string;
   currentCondition: BookCondition;
   barcodeValue: string;
+  copyNumber?: number | null;
 }
 
 export default function CheckoutPage() {
@@ -58,17 +61,18 @@ export default function CheckoutPage() {
   const [borrowers, setBorrowers] = useState<BorrowerOption[]>([]);
   const [books, setBooks] = useState<BookOption[]>([]);
   const [fetching, setFetching] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const form = useForm<CheckoutInput>({
     resolver: zodResolver(checkoutSchema),
     defaultValues: {
-      borrowerId: "",
-      bookId: "",
+      borrowerId: undefined,
+      bookId: undefined,
       loanPeriodType: LoanPeriodType.TWO_WEEKS,
       customDays: null,
       checkoutCondition: BookCondition.GOOD,
       checkoutNotes: "",
-      termsAccepted: undefined as unknown as true,
+      termsAccepted: undefined,
       termsVersion: "1.0",
     },
   });
@@ -79,18 +83,30 @@ export default function CheckoutPage() {
     async function load() {
       try {
         const [borrowersRes, booksRes] = await Promise.all([
-          fetch("/api/borrowers?status=ACTIVE"),
-          fetch("/api/books?status=AVAILABLE"),
+          fetch("/api/borrowers?status=ACTIVE&limit=100"),
+          fetch("/api/books?status=AVAILABLE&limit=100"),
         ]);
         const borrowersJson = await borrowersRes.json();
         const booksJson = await booksRes.json();
+
+        if (!borrowersRes.ok) {
+          throw new Error(formatApiError(borrowersJson.error) ?? "Failed to load borrowers");
+        }
+        if (!booksRes.ok) {
+          throw new Error(formatApiError(booksJson.error) ?? "Failed to load books");
+        }
+
         setBorrowers(borrowersJson.data ?? []);
         setBooks(booksJson.data ?? []);
-      } catch {
+        setLoadError(null);
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : "Failed to load checkout data";
+        setLoadError(message);
         toast({
           variant: "destructive",
           title: "Error",
-          description: "Failed to load checkout data",
+          description: message,
         });
       } finally {
         setFetching(false);
@@ -116,7 +132,7 @@ export default function CheckoutPage() {
         body: JSON.stringify(values),
       });
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? "Checkout failed");
+      if (!res.ok) throw new Error(formatApiError(json.error) ?? "Checkout failed");
 
       toast({
         title: "Checkout complete",
@@ -151,12 +167,47 @@ export default function CheckoutPage() {
 
   if (fetching) return <LoadingSpinner className="py-12" />;
 
+  const canProceed = borrowers.length > 0 && books.length > 0;
+
   return (
     <div className="space-y-6">
       <PageHeader
         title="Checkout"
         description="Check out a book to a borrower"
       />
+
+      {loadError ? (
+        <Alert variant="destructive">
+          <AlertTitle>Unable to load checkout data</AlertTitle>
+          <AlertDescription>{loadError}</AlertDescription>
+        </Alert>
+      ) : null}
+
+      {!loadError && !canProceed ? (
+        <Alert>
+          <AlertTitle>Checkout requires books and borrowers</AlertTitle>
+          <AlertDescription className="space-y-2">
+            {borrowers.length === 0 ? (
+              <p>
+                No active borrowers found.{" "}
+                <Link href="/borrowers/new" className="font-medium underline">
+                  Add a borrower
+                </Link>{" "}
+                first.
+              </p>
+            ) : null}
+            {books.length === 0 ? (
+              <p>
+                No available books found.{" "}
+                <Link href="/books/new" className="font-medium underline">
+                  Add a book
+                </Link>{" "}
+                or check in a returned copy.
+              </p>
+            ) : null}
+          </AlertDescription>
+        </Alert>
+      ) : null}
 
       <div className="flex items-center gap-2">
         {STEPS.map((label, i) => (
@@ -194,18 +245,28 @@ export default function CheckoutPage() {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Select Borrower</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
+                      <Select
+                        onValueChange={field.onChange}
+                        value={field.value ?? ""}
+                        disabled={!canProceed}
+                      >
                         <FormControl>
                           <SelectTrigger>
                             <SelectValue placeholder="Choose a borrower" />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {borrowers.map((b) => (
-                            <SelectItem key={b.id} value={b.id}>
-                              {b.fullName}
+                          {borrowers.length === 0 ? (
+                            <SelectItem value="__none" disabled>
+                              No active borrowers
                             </SelectItem>
-                          ))}
+                          ) : (
+                            borrowers.map((b) => (
+                              <SelectItem key={b.id} value={b.id}>
+                                {b.fullName}
+                              </SelectItem>
+                            ))
+                          )}
                         </SelectContent>
                       </Select>
                       <FormMessage />
@@ -233,7 +294,8 @@ export default function CheckoutPage() {
                               );
                             }
                           }}
-                          value={field.value}
+                          value={field.value ?? ""}
+                          disabled={!canProceed}
                         >
                           <FormControl>
                             <SelectTrigger>
@@ -241,11 +303,18 @@ export default function CheckoutPage() {
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            {books.map((b) => (
-                              <SelectItem key={b.id} value={b.id}>
-                                {b.title} — {b.author}
+                            {books.length === 0 ? (
+                              <SelectItem value="__none" disabled>
+                                No available books
                               </SelectItem>
-                            ))}
+                            ) : (
+                              books.map((b) => (
+                                <SelectItem key={b.id} value={b.id}>
+                                  {b.title} — {b.author}
+                                  {b.copyNumber ? ` (Copy ${b.copyNumber})` : ""}
+                                </SelectItem>
+                              ))
+                            )}
                           </SelectContent>
                         </Select>
                         <FormMessage />
@@ -405,12 +474,12 @@ export default function CheckoutPage() {
                   Back
                 </Button>
                 {step < STEPS.length - 1 ? (
-                  <Button type="button" onClick={nextStep}>
+                  <Button type="button" onClick={nextStep} disabled={!canProceed}>
                     Next
                     <ChevronRight className="ml-2 h-4 w-4" />
                   </Button>
                 ) : (
-                  <Button type="submit" disabled={loading}>
+                  <Button type="submit" disabled={loading || !canProceed}>
                     {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                     Complete Checkout
                   </Button>

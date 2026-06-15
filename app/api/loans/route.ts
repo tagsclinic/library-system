@@ -149,48 +149,73 @@ export async function POST(request: NextRequest) {
   );
   const { ipAddress, userAgent } = getRequestMeta(request);
 
-  const loan = await prisma.$transaction(async (tx) => {
-    const created = await tx.loan.create({
-      data: {
-        organizationId: auth.organizationId,
-        bookId: parsed.data.bookId,
-        borrowerId: parsed.data.borrowerId,
-        checkoutDate,
-        dueDate,
-        loanPeriodType: parsed.data.loanPeriodType,
-        customDays: parsed.data.customDays ?? null,
-        checkoutCondition: parsed.data.checkoutCondition,
-        checkoutNotes: parsed.data.checkoutNotes ?? null,
-        termsAccepted: true,
-        termsAcceptedAt: checkoutDate,
-        termsVersion: parsed.data.termsVersion,
-        status: LoanStatus.ACTIVE,
-        checkedOutBy: auth.user.email ?? auth.user.id,
-      },
-      include: {
-        book: { select: { id: true, title: true, author: true } },
-        borrower: { select: { id: true, fullName: true } },
-      },
-    });
+  let loan;
+  try {
+    loan = await prisma.$transaction(async (tx) => {
+      const bookUpdate = await tx.book.updateMany({
+        where: {
+          id: parsed.data.bookId,
+          organizationId: auth.organizationId,
+          status: BookStatus.AVAILABLE,
+          deletedAt: null,
+        },
+        data: { status: BookStatus.CHECKED_OUT },
+      });
 
-    await tx.book.update({
-      where: { id: parsed.data.bookId },
-      data: { status: BookStatus.CHECKED_OUT },
-    });
+      if (bookUpdate.count === 0) {
+        throw new Error("BOOK_NOT_AVAILABLE");
+      }
 
-    await tx.conditionHistory.create({
-      data: {
-        organizationId: auth.organizationId,
-        bookId: parsed.data.bookId,
-        loanId: created.id,
-        condition: parsed.data.checkoutCondition,
-        notes: parsed.data.checkoutNotes ?? "Condition recorded at checkout",
-        recordedBy: auth.user.email ?? auth.user.id,
-      },
-    });
+      const created = await tx.loan.create({
+        data: {
+          organizationId: auth.organizationId,
+          bookId: parsed.data.bookId,
+          borrowerId: parsed.data.borrowerId,
+          checkoutDate,
+          dueDate,
+          loanPeriodType: parsed.data.loanPeriodType,
+          customDays: parsed.data.customDays ?? null,
+          checkoutCondition: parsed.data.checkoutCondition,
+          checkoutNotes: parsed.data.checkoutNotes ?? null,
+          termsAccepted: true,
+          termsAcceptedAt: checkoutDate,
+          termsVersion: parsed.data.termsVersion,
+          status: LoanStatus.ACTIVE,
+          checkedOutBy: auth.user.email ?? auth.user.id,
+        },
+        include: {
+          book: { select: { id: true, title: true, author: true } },
+          borrower: { select: { id: true, fullName: true } },
+        },
+      });
 
-    return created;
-  });
+      await tx.book.update({
+        where: { id: parsed.data.bookId },
+        data: { currentCondition: parsed.data.checkoutCondition },
+      });
+
+      await tx.conditionHistory.create({
+        data: {
+          organizationId: auth.organizationId,
+          bookId: parsed.data.bookId,
+          loanId: created.id,
+          condition: parsed.data.checkoutCondition,
+          notes: parsed.data.checkoutNotes ?? "Condition recorded at checkout",
+          recordedBy: auth.user.email ?? auth.user.id,
+        },
+      });
+
+      return created;
+    });
+  } catch (error) {
+    if (error instanceof Error && error.message === "BOOK_NOT_AVAILABLE") {
+      return NextResponse.json(
+        { error: "Book is not available for checkout" },
+        { status: 409 }
+      );
+    }
+    throw error;
+  }
 
   await logAudit({
     organizationId: auth.organizationId,

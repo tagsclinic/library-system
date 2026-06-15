@@ -31,7 +31,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
 import { checkinSchema, type CheckinInput } from "@/lib/validations";
-import { formatDate, formatCurrency } from "@/lib/utils";
+import { formatApiError, formatDate, formatCurrency } from "@/lib/utils";
 import { BookCondition, LoanStatus, PaymentStatus } from "@/types";
 
 interface ActiveLoan {
@@ -79,27 +79,19 @@ export default function CheckinPage() {
     setLoan(null);
     try {
       const res = await fetch(
-        `/api/search?q=${encodeURIComponent(barcode)}&type=loans`
+        `/api/loans/lookup?barcode=${encodeURIComponent(barcode.trim())}`
       );
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? "Search failed");
+      if (!res.ok) {
+        throw new Error(formatApiError(json.error) ?? "No active loan found");
+      }
 
-      const loans = json.results?.loans ?? json.data?.results?.loans ?? [];
-      const active = loans.find(
-        (l: ActiveLoan) =>
-          l.book?.barcodeValue === barcode ||
-          l.id === barcode ||
-          l.status === LoanStatus.ACTIVE ||
-          l.status === LoanStatus.OVERDUE
-      );
-
-      if (!active) {
-        toast({
-          variant: "destructive",
-          title: "Not found",
-          description: "No active loan found for this barcode.",
-        });
-        return;
+      const active = json.data as ActiveLoan;
+      if (
+        active.status !== LoanStatus.ACTIVE &&
+        active.status !== LoanStatus.OVERDUE
+      ) {
+        throw new Error("This loan is not active and cannot be checked in.");
       }
 
       setLoan(active);
@@ -116,7 +108,7 @@ export default function CheckinPage() {
     } catch (err) {
       toast({
         variant: "destructive",
-        title: "Error",
+        title: "Not found",
         description: err instanceof Error ? err.message : "Search failed",
       });
     } finally {
@@ -133,7 +125,7 @@ export default function CheckinPage() {
         body: JSON.stringify(values),
       });
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? "Check-in failed");
+      if (!res.ok) throw new Error(formatApiError(json.error) ?? "Check-in failed");
 
       toast({
         title: "Check-in complete",

@@ -75,6 +75,33 @@ export function truncate(text: string, maxLength: number): string {
   return `${text.slice(0, maxLength - 1)}…`;
 }
 
+export function formatApiError(error: unknown): string {
+  if (typeof error === "string") return error;
+  if (!error || typeof error !== "object") return "Request failed";
+
+  const payload = error as Record<string, unknown>;
+  if (typeof payload.message === "string") return payload.message;
+
+  const fieldErrors = payload.fieldErrors as
+    | Record<string, string[] | undefined>
+    | undefined;
+  const formErrors = payload.formErrors as string[] | undefined;
+
+  if (fieldErrors || formErrors) {
+    const messages = [
+      ...(formErrors ?? []),
+      ...Object.entries(fieldErrors ?? {}).flatMap(([field, msgs]) =>
+        (msgs ?? []).map((message) =>
+          field === "_errors" ? message : `${field.replace(/_/g, " ")}: ${message}`
+        )
+      ),
+    ];
+    return messages.join(". ") || "Validation failed";
+  }
+
+  return "Request failed";
+}
+
 export function slugify(text: string): string {
   return text
     .toLowerCase()
