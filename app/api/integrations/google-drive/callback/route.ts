@@ -1,5 +1,7 @@
+import { UserRole } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
 
+import { getUserRole } from "@/lib/auth";
 import {
   decodeOAuthState,
   ensureDriveFolder,
@@ -7,7 +9,9 @@ import {
   getGoogleAccountEmail,
   isGoogleDriveConfigured,
 } from "@/lib/google-drive";
+import { getOrganizationId } from "@/lib/organization";
 import { prisma } from "@/lib/prisma";
+import { createClient } from "@/lib/supabase/server";
 
 export async function GET(request: NextRequest) {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ?? "";
@@ -31,6 +35,22 @@ export async function GET(request: NextRequest) {
 
   try {
     const { organizationId } = decodeOAuthState(state);
+
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (
+      !user ||
+      getOrganizationId(user) !== organizationId ||
+      getUserRole(user) !== UserRole.ADMIN
+    ) {
+      return NextResponse.redirect(
+        `${settingsUrl}&error=${encodeURIComponent("Session expired or unauthorized. Sign in as an admin and try again.")}`
+      );
+    }
+
     const tokens = await exchangeGoogleCode(code);
 
     if (!tokens.refresh_token) {

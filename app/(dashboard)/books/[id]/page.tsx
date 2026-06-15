@@ -29,6 +29,7 @@ interface BookDetail {
   category: string | null;
   isbn: string | null;
   barcodeValue: string;
+  coverImageUrl: string | null;
   status: BookStatus;
   currentCondition: BookCondition;
   replacementValue: string | null;
@@ -97,6 +98,25 @@ export default function BookDetailPage() {
       />
 
       <div className="grid gap-6 lg:grid-cols-2">
+        {book.coverImageUrl ? (
+          <Card className="overflow-hidden lg:col-span-2">
+            <CardContent className="flex items-center gap-6 p-6">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={book.coverImageUrl}
+                alt={`Cover of ${book.title}`}
+                className="h-48 w-32 rounded-lg border object-cover shadow-sm"
+              />
+              <div>
+                <p className="text-sm font-medium">Cover photo</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Stored in your library&apos;s Google Drive
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        ) : null}
+
         <Card>
           <CardHeader>
             <CardTitle>Book Details</CardTitle>
