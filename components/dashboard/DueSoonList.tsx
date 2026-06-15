@@ -21,7 +21,7 @@ interface DueSoonListProps {
   loans: OverdueLoan[];
 }
 
-export function DueSoonList({ loans }: DueSoonListProps) {
+export function DueSoonList({ loans = [] }: DueSoonListProps) {
   return (
     <Card className="border-border/60 shadow-sm">
       <CardHeader className="pb-3">

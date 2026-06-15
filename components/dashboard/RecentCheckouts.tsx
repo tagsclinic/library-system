@@ -25,7 +25,7 @@ interface RecentCheckoutsProps {
   checkouts: RecentCheckout[];
 }
 
-export function RecentCheckouts({ checkouts }: RecentCheckoutsProps) {
+export function RecentCheckouts({ checkouts = [] }: RecentCheckoutsProps) {
   return (
     <Card className="border-border/60 shadow-sm">
       <CardHeader className="pb-3">

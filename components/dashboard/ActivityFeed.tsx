@@ -48,7 +48,7 @@ const defaultMeta = {
   bg: "bg-slate-50",
 };
 
-export function ActivityFeed({ activities }: ActivityFeedProps) {
+export function ActivityFeed({ activities = [] }: ActivityFeedProps) {
   return (
     <Card className="border-border/60 shadow-sm">
       <CardHeader className="pb-3">

@@ -134,7 +134,7 @@ export function StatsCards({ stats }: StatsCardsProps) {
                 className="text-3xl font-bold tracking-tight"
                 style={{ color: BRAND.primaryColor }}
               >
-                {stats[key].toLocaleString()}
+                {(stats[key] ?? 0).toLocaleString()}
               </p>
               <p className="text-xs text-muted-foreground">vs last month</p>
             </div>
