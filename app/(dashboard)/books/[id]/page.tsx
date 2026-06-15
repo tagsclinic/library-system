@@ -3,13 +3,24 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { Pencil } from "lucide-react";
+import { Copy, Loader2, Pencil } from "lucide-react";
 
 import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Table,
   TableBody,
@@ -21,6 +32,14 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { BookCondition, BookStatus, LoanStatus } from "@/types";
+
+interface SiblingCopy {
+  id: string;
+  copyNumber: number | null;
+  barcodeValue: string;
+  status: BookStatus;
+  currentCondition: BookCondition;
+}
 
 interface BookDetail {
   id: string;
@@ -36,6 +55,10 @@ interface BookDetail {
   notes: string | null;
   publishedYear: number | null;
   publisher: string | null;
+  copyNumber: number | null;
+  copyGroupId: string | null;
+  copyStats: { copyNumber: number | null; total: number } | null;
+  siblingCopies: SiblingCopy[];
   loans: Array<{
     id: string;
     status: LoanStatus;
@@ -58,14 +81,21 @@ export default function BookDetailPage() {
   const { toast } = useToast();
   const [book, setBook] = useState<BookDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  const [duplicateOpen, setDuplicateOpen] = useState(false);
+  const [duplicateCopies, setDuplicateCopies] = useState(1);
+  const [duplicating, setDuplicating] = useState(false);
+
+  async function loadBook() {
+    const res = await fetch(`/api/books/${params.id}`);
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error ?? "Failed to load book");
+    setBook(json.data);
+  }
 
   useEffect(() => {
     async function load() {
       try {
-        const res = await fetch(`/api/books/${params.id}`);
-        const json = await res.json();
-        if (!res.ok) throw new Error(json.error ?? "Failed to load book");
-        setBook(json.data);
+        await loadBook();
       } catch (err) {
         toast({
           variant: "destructive",
@@ -79,6 +109,35 @@ export default function BookDetailPage() {
     load();
   }, [params.id, toast]);
 
+  async function handleDuplicate() {
+    setDuplicating(true);
+    try {
+      const res = await fetch(`/api/books/${params.id}/duplicate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ copies: duplicateCopies }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Failed to duplicate book");
+
+      const created = json.data?.copiesCreated ?? duplicateCopies;
+      toast({
+        title: created > 1 ? `${created} copies added` : "Copy added",
+        description: `"${book?.title}" duplicated successfully.`,
+      });
+      setDuplicateOpen(false);
+      await loadBook();
+    } catch (err) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: err instanceof Error ? err.message : "Failed to duplicate book",
+      });
+    } finally {
+      setDuplicating(false);
+    }
+  }
+
   if (loading) return <LoadingSpinner className="py-12" />;
   if (!book) return <p className="text-muted-foreground">Book not found.</p>;
 
@@ -88,12 +147,65 @@ export default function BookDetailPage() {
         title={book.title}
         description={`by ${book.author}`}
         action={
-          <Button asChild>
-            <Link href={`/books/${book.id}/edit`}>
-              <Pencil className="mr-2 h-4 w-4" />
-              Edit
-            </Link>
-          </Button>
+          <div className="flex gap-2">
+            <Dialog open={duplicateOpen} onOpenChange={setDuplicateOpen}>
+              <DialogTrigger asChild>
+                <Button variant="outline">
+                  <Copy className="mr-2 h-4 w-4" />
+                  Duplicate
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Duplicate book</DialogTitle>
+                  <DialogDescription>
+                    Create additional copies of &ldquo;{book.title}&rdquo; with the same
+                    details and unique barcodes.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-2 py-2">
+                  <Label htmlFor="duplicate-copies">Number of copies to add</Label>
+                  <Input
+                    id="duplicate-copies"
+                    type="number"
+                    min={1}
+                    max={50}
+                    value={duplicateCopies}
+                    onChange={(e) =>
+                      setDuplicateCopies(
+                        Math.min(50, Math.max(1, Number(e.target.value) || 1))
+                      )
+                    }
+                  />
+                </div>
+                <DialogFooter>
+                  <Button
+                    variant="outline"
+                    onClick={() => setDuplicateOpen(false)}
+                    disabled={duplicating}
+                  >
+                    Cancel
+                  </Button>
+                  <Button onClick={handleDuplicate} disabled={duplicating}>
+                    {duplicating ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Adding…
+                      </>
+                    ) : (
+                      "Add copies"
+                    )}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+            <Button asChild>
+              <Link href={`/books/${book.id}/edit`}>
+                <Pencil className="mr-2 h-4 w-4" />
+                Edit
+              </Link>
+            </Button>
+          </div>
         }
       />
 
@@ -142,6 +254,17 @@ export default function BookDetailPage() {
               <span className="text-muted-foreground">Barcode</span>
               <span className="font-mono">{book.barcodeValue}</span>
             </div>
+            {book.copyNumber ? (
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Copy</span>
+                <span>
+                  {book.copyNumber}
+                  {book.copyStats?.total
+                    ? ` of ${book.copyStats.total}`
+                    : null}
+                </span>
+              </div>
+            ) : null}
             <div className="flex justify-between">
               <span className="text-muted-foreground">Replacement Value</span>
               <span>{formatCurrency(book.replacementValue)}</span>
@@ -189,6 +312,44 @@ export default function BookDetailPage() {
           </CardContent>
         </Card>
       </div>
+
+      {book.siblingCopies?.length > 0 ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Other Copies</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Copy #</TableHead>
+                  <TableHead>Barcode</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Condition</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {book.siblingCopies.map((copy) => (
+                  <TableRow key={copy.id}>
+                    <TableCell>{copy.copyNumber ?? "—"}</TableCell>
+                    <TableCell className="font-mono">{copy.barcodeValue}</TableCell>
+                    <TableCell>
+                      <StatusBadge status={copy.status} />
+                    </TableCell>
+                    <TableCell>{copy.currentCondition}</TableCell>
+                    <TableCell className="text-right">
+                      <Button variant="ghost" size="sm" asChild>
+                        <Link href={`/books/${copy.id}`}>View</Link>
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Card>
         <CardHeader>

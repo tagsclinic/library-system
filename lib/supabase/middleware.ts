@@ -40,6 +40,9 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const { pathname } = request.nextUrl;
+  const isPublicRoute =
+    pathname.startsWith("/library/") ||
+    pathname.startsWith("/api/public/");
   const isAuthRoute =
     pathname.startsWith("/login") ||
     pathname.startsWith("/signup") ||
@@ -47,7 +50,8 @@ export async function updateSession(request: NextRequest) {
   const isPlatformRoute =
     pathname.startsWith("/platform") || pathname.startsWith("/api/platform");
   const isProtectedRoute =
-    pathname.startsWith("/dashboard") ||
+    !isPublicRoute &&
+    (pathname.startsWith("/dashboard") ||
     pathname.startsWith("/books") ||
     pathname.startsWith("/checkout") ||
     pathname.startsWith("/checkin") ||
@@ -58,8 +62,9 @@ export async function updateSession(request: NextRequest) {
     pathname.startsWith("/notifications") ||
     pathname.startsWith("/audit") ||
     pathname.startsWith("/settings") ||
+    pathname.startsWith("/reservations") ||
     isPlatformRoute ||
-    (pathname.startsWith("/api") && !pathname.startsWith("/api/auth"));
+    (pathname.startsWith("/api") && !pathname.startsWith("/api/auth")));
 
   if (!user && isProtectedRoute) {
     const url = request.nextUrl.clone();

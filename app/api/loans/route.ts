@@ -126,9 +126,17 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  if (borrower.status === BorrowerStatus.BLOCKED) {
+  if (
+    borrower.status === BorrowerStatus.BLOCKED ||
+    borrower.status === BorrowerStatus.PENDING
+  ) {
     return NextResponse.json(
-      { error: "Borrower is blocked and cannot check out books" },
+      {
+        error:
+          borrower.status === BorrowerStatus.PENDING
+            ? "Borrower account is pending approval"
+            : "Borrower is blocked and cannot check out books",
+      },
       { status: 409 }
     );
   }

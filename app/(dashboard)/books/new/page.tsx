@@ -51,6 +51,7 @@ export default function NewBookPage() {
       publishedYear: undefined,
       publisher: "",
       edition: "",
+      quantity: 1,
     },
   });
 
@@ -65,8 +66,13 @@ export default function NewBookPage() {
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Failed to create book");
 
-      toast({ title: "Book created", description: `"${values.title}" added to catalog.` });
-      router.push(`/books/${json.data.id}`);
+      const copiesCreated = json.data?.copiesCreated ?? 1;
+
+      toast({
+        title: copiesCreated > 1 ? `${copiesCreated} copies created` : "Book created",
+        description: `"${values.title}" added to catalog.`,
+      });
+      router.push(`/books/${json.data?.book?.id ?? json.data?.id}`);
     } catch (err) {
       toast({
         variant: "destructive",
@@ -253,6 +259,30 @@ export default function NewBookPage() {
                           ))}
                         </SelectContent>
                       </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="quantity"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Number of copies</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          min={1}
+                          max={50}
+                          {...field}
+                          value={field.value ?? 1}
+                          onChange={(e) =>
+                            field.onChange(
+                              e.target.value ? Number(e.target.value) : 1
+                            )
+                          }
+                        />
+                      </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}

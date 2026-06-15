@@ -7,6 +7,7 @@ import {
   LoanPeriodType,
   LoanStatus,
   PaymentStatus,
+  ReservationStatus,
   UserRole,
 } from "@prisma/client";
 
@@ -29,6 +30,11 @@ export const bookSchema = z.object({
     .nullable(),
   publisher: z.string().max(500).optional().nullable(),
   edition: z.string().max(100).optional().nullable(),
+  quantity: z.coerce.number().int().min(1).max(50).optional().default(1),
+});
+
+export const bookDuplicateSchema = z.object({
+  copies: z.coerce.number().int().min(1).max(50).optional().default(1),
 });
 
 export const bookUpdateSchema = bookSchema.partial();
@@ -239,6 +245,28 @@ export const orgMemberUpdateSchema = z.object({
   fullName: z.string().min(2).max(120).optional(),
   role: z.nativeEnum(UserRole).optional(),
   password: z.string().min(8).max(72).optional(),
+});
+
+export const publicBorrowerRegisterSchema = z.object({
+  fullName: z.string().min(2, "Name is required").max(120),
+  email: z.string().email("Invalid email address"),
+  password: z.string().min(8, "Password must be at least 8 characters").max(72),
+  phone: z
+    .string()
+    .min(7, "Phone number is required")
+    .max(20)
+    .regex(/^[\d\s\-+()]+$/, "Invalid phone number format"),
+  address: z.string().max(500).optional().nullable(),
+});
+
+export const reservationCreateSchema = z.object({
+  bookId: z.string().cuid("Invalid book ID"),
+  notes: z.string().max(500).optional().nullable(),
+});
+
+export const reservationReviewSchema = z.object({
+  status: z.enum(["APPROVED", "REJECTED", "FULFILLED", "CANCELLED"]),
+  notes: z.string().max(500).optional().nullable(),
 });
 
 export type BookInput = z.infer<typeof bookSchema>;

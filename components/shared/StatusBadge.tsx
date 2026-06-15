@@ -34,6 +34,8 @@ const bookStatusStyles: Record<BookStatus, string> = {
 };
 
 const borrowerStatusStyles: Record<BorrowerStatus, string> = {
+  [BorrowerStatus.PENDING]:
+    "border-transparent bg-sky-100 text-sky-800 hover:bg-sky-100",
   [BorrowerStatus.ACTIVE]:
     "border-transparent bg-emerald-100 text-emerald-800 hover:bg-emerald-100",
   [BorrowerStatus.WATCHLIST]:

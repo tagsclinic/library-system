@@ -8,6 +8,7 @@ import { Loader2 } from "lucide-react";
 import { z } from "zod";
 
 import { GoogleDriveSettings } from "@/components/settings/GoogleDriveSettings";
+import { PublicCatalogLink } from "@/components/settings/PublicCatalogLink";
 import { TeamSettings } from "@/components/settings/TeamSettings";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
@@ -130,6 +131,7 @@ function SettingsContent() {
         </TabsList>
 
         <TabsContent value="general" className="space-y-6">
+          <PublicCatalogLink />
           <Card>
             <CardHeader>
               <CardTitle>Application Settings</CardTitle>

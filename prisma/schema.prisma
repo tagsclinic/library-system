@@ -33,9 +33,18 @@ enum BookCondition {
 }
 
 enum BorrowerStatus {
+  PENDING
   ACTIVE
   WATCHLIST
   BLOCKED
+}
+
+enum ReservationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+  FULFILLED
 }
 
 enum LoanPeriodType {
@@ -130,6 +139,7 @@ model Organization {
   phone            String?
   address          String?
   subscriptionPlan SubscriptionPlan @default(STARTER)
+  publicCatalogEnabled Boolean      @default(true)
   termsContent     String?          @db.Text
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
@@ -146,6 +156,7 @@ model Organization {
   appSettings              AppSettings[]
   members                  OrganizationMember[]
   integration              OrganizationIntegration?
+  reservations             BookReservation[]
 
   @@index([slug])
 }
@@ -213,6 +224,8 @@ model Book {
   publishedYear    Int?
   publisher        String?
   edition          String?
+  copyGroupId      String?
+  copyNumber       Int?
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
   deletedAt        DateTime?
@@ -221,6 +234,7 @@ model Book {
   loans            Loan[]
   conditionHistory ConditionHistory[]
   auditLogs        AuditLog[]
+  reservations     BookReservation[]
 
   @@unique([organizationId, barcodeValue])
   @@unique([organizationId, qrCodeValue])
@@ -230,12 +244,14 @@ model Book {
   @@index([title])
   @@index([author])
   @@index([category])
+  @@index([copyGroupId])
   @@index([deletedAt])
 }
 
 model Borrower {
   id             String         @id @default(cuid())
   organizationId String
+  authUserId     String?        @unique
   fullName       String
   phone          String
   email          String?
@@ -246,16 +262,40 @@ model Borrower {
   updatedAt      DateTime       @updatedAt
   deletedAt      DateTime?
 
-  organization Organization @relation(fields: [organizationId], references: [id])
+  organization Organization      @relation(fields: [organizationId], references: [id])
   loans        Loan[]
   auditLogs    AuditLog[]
+  reservations BookReservation[]
 
   @@index([organizationId])
   @@index([status])
   @@index([phone])
   @@index([email])
   @@index([fullName])
+  @@index([authUserId])
   @@index([deletedAt])
+}
+
+model BookReservation {
+  id             String            @id @default(cuid())
+  organizationId String
+  bookId         String
+  borrowerId     String
+  status         ReservationStatus @default(PENDING)
+  notes          String?
+  reviewedBy     String?
+  reviewedAt     DateTime?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  book         Book         @relation(fields: [bookId], references: [id])
+  borrower     Borrower     @relation(fields: [borrowerId], references: [id])
+
+  @@index([organizationId])
+  @@index([bookId])
+  @@index([borrowerId])
+  @@index([status])
 }
 
 model Loan {

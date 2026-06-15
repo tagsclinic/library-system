@@ -10,6 +10,7 @@ export {
   PaymentStatus,
   UserRole,
   PlatformRole,
+  ReservationStatus,
   AuditAction,
 } from "@prisma/client";
 

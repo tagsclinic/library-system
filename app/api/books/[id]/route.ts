@@ -13,6 +13,7 @@ import { canManageBooks } from "@/lib/auth";
 import { softDeleteData } from "@/lib/organization";
 import { prisma } from "@/lib/prisma";
 import { logAudit } from "@/lib/services/audit";
+import { getSiblingCopies } from "@/lib/services/book-copies";
 import { bookUpdateSchema } from "@/lib/validations";
 
 type RouteParams = { params: Promise<{ id: string }> };
@@ -46,7 +47,24 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ error: "Book not found" }, { status: 404 });
   }
 
-  return NextResponse.json({ data: serialize(book) });
+  const siblingCopies = await getSiblingCopies(
+    auth.organizationId,
+    book.copyGroupId,
+    book.id
+  );
+
+  return NextResponse.json({
+    data: serialize({
+      ...book,
+      siblingCopies,
+      copyStats: book.copyGroupId
+        ? {
+            copyNumber: book.copyNumber,
+            total: siblingCopies.length + 1,
+          }
+        : null,
+    }),
+  });
 }
 
 export async function PATCH(request: NextRequest, { params }: RouteParams) {

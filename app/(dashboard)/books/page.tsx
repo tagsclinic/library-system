@@ -34,6 +34,8 @@ interface BookRow {
   category: string | null;
   isbn: string | null;
   status: BookStatus;
+  copyNumber: number | null;
+  copyStats: { total: number; available: number } | null;
 }
 
 export default function BooksPage() {
@@ -138,6 +140,7 @@ export default function BooksPage() {
                 <TableHead>Author</TableHead>
                 <TableHead>Category</TableHead>
                 <TableHead>ISBN</TableHead>
+                <TableHead>Copies</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
@@ -145,7 +148,7 @@ export default function BooksPage() {
             <TableBody>
               {books.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground">
+                  <TableCell colSpan={7} className="text-center text-muted-foreground">
                     No books found
                   </TableCell>
                 </TableRow>
@@ -156,6 +159,16 @@ export default function BooksPage() {
                     <TableCell>{book.author}</TableCell>
                     <TableCell>{book.category ?? "—"}</TableCell>
                     <TableCell>{book.isbn ?? "—"}</TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {book.copyStats ? (
+                        <>
+                          {book.copyNumber ? `Copy ${book.copyNumber} · ` : null}
+                          {book.copyStats.available} avail / {book.copyStats.total} total
+                        </>
+                      ) : (
+                        "—"
+                      )}
+                    </TableCell>
                     <TableCell>
                       <StatusBadge status={book.status} />
                     </TableCell>

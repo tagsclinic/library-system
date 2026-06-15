@@ -3,6 +3,13 @@ import type { User } from "@supabase/supabase-js";
 import { Prisma, UserRole } from "@prisma/client";
 
 import { getUserRole } from "@/lib/auth";
+import {
+  getBorrowerForUser,
+  getBorrowerIdFromUser,
+  getBorrowerOrganizationId,
+  isBorrowerAccount,
+  isBorrowerApproved,
+} from "@/lib/borrower-auth";
 import { getOrganizationId, requireOrganization } from "@/lib/organization";
 import { isSuperAdmin } from "@/lib/platform";
 import { markOverdueLoans } from "@/lib/overdue";
@@ -84,8 +91,62 @@ export async function requireOrgAdmin(): Promise<AuthContext | NextResponse> {
   return auth;
 }
 
+export type BorrowerAuthContext = {
+  user: User;
+  borrowerId: string;
+  organizationId: string;
+};
+
+export async function requireBorrowerAuth(): Promise<
+  BorrowerAuthContext | NextResponse
+> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+    error,
+  } = await supabase.auth.getUser();
+
+  if (error || !user || !isBorrowerAccount(user)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const borrowerId = getBorrowerIdFromUser(user);
+  const organizationId = getBorrowerOrganizationId(user);
+
+  if (!borrowerId || !organizationId) {
+    return NextResponse.json({ error: "Invalid borrower session" }, { status: 403 });
+  }
+
+  const borrower = await getBorrowerForUser(user);
+  if (!borrower || borrower.organizationId !== organizationId) {
+    return NextResponse.json({ error: "Borrower account not found" }, { status: 403 });
+  }
+
+  return { user, borrowerId, organizationId };
+}
+
+export async function requireApprovedBorrowerAuth(): Promise<
+  BorrowerAuthContext | NextResponse
+> {
+  const auth = await requireBorrowerAuth();
+  if (isErrorResponse(auth)) return auth;
+
+  const borrower = await getBorrowerForUser(auth.user);
+  if (!borrower || !isBorrowerApproved(borrower.status)) {
+    return NextResponse.json(
+      {
+        error:
+          "Your account is pending approval. You will be able to reserve books once a librarian approves your request.",
+      },
+      { status: 403 }
+    );
+  }
+
+  return auth;
+}
+
 export function isErrorResponse(
-  value: AuthContext | { user: User } | NextResponse
+  value: AuthContext | BorrowerAuthContext | { user: User } | NextResponse
 ): value is NextResponse {
   return value instanceof NextResponse;
 }
