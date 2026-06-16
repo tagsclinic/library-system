@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { Pencil } from "lucide-react";
+import { CreditCard, Pencil } from "lucide-react";
 
 import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
@@ -114,12 +114,20 @@ export default function BorrowerProfilePage() {
         title={borrower.fullName}
         description={borrower.email ?? borrower.phone}
         action={
-          <Button asChild variant="outline">
-            <Link href={`/borrowers/${borrower.id}/edit`}>
-              <Pencil className="mr-2 h-4 w-4" />
-              Edit
-            </Link>
-          </Button>
+          <div className="flex gap-2">
+            <Button asChild variant="outline">
+              <Link href={`/borrowers/${borrower.id}/card`}>
+                <CreditCard className="mr-2 h-4 w-4" />
+                Library Card
+              </Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link href={`/borrowers/${borrower.id}/edit`}>
+                <Pencil className="mr-2 h-4 w-4" />
+                Edit
+              </Link>
+            </Button>
+          </div>
         }
       />
 

@@ -14,8 +14,9 @@ import {
 import { canManageBooks } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { logAudit } from "@/lib/services/audit";
+import { sendNewBookAnnouncement } from "@/lib/services/book-announcements";
 import { attachCopyStats, createBookCopies } from "@/lib/services/book-copies";
-import { bookSchema } from "@/lib/validations";
+import { bookCreateSchema } from "@/lib/validations";
 
 export async function GET(request: NextRequest) {
   const auth = await requireAuth();
@@ -76,10 +77,11 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json();
-  const parsed = bookSchema.safeParse(body);
+  const parsed = bookCreateSchema.safeParse(body);
   if (!parsed.success) return validationError(parsed.error);
 
-  const { quantity, ...bookData } = parsed.data;
+  const { quantity, notifyMode, notifyMessage, selectedBorrowerIds, ...bookData } =
+    parsed.data;
   const { ipAddress, userAgent } = getRequestMeta(request);
 
   const { books } = await createBookCopies({
@@ -102,6 +104,21 @@ export async function POST(request: NextRequest) {
   });
 
   const book = books[0];
+
+  const organization = await prisma.organization.findUnique({
+    where: { id: auth.organizationId },
+    select: { name: true },
+  });
+
+  const announcement = await sendNewBookAnnouncement({
+    organizationId: auth.organizationId,
+    bookTitle: book.title,
+    bookAuthor: book.author,
+    notifyMode: notifyMode ?? "NONE",
+    notifyMessage,
+    selectedBorrowerIds,
+    libraryName: organization?.name,
+  });
 
   await logAudit({
     organizationId: auth.organizationId,
@@ -126,6 +143,7 @@ export async function POST(request: NextRequest) {
         book,
         copiesCreated: books.length,
         books,
+        announcement,
       }),
     },
     { status: 201 }

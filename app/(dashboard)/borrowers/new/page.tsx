@@ -6,6 +6,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2 } from "lucide-react";
 
+import { PhoneInput } from "@/components/shared/PhoneInput";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -106,7 +107,7 @@ export default function NewBorrowerPage() {
                     <FormItem>
                       <FormLabel>Phone *</FormLabel>
                       <FormControl>
-                        <Input {...field} />
+                        <PhoneInput value={field.value} onChange={field.onChange} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>

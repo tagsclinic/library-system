@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2, Search } from "lucide-react";
 
+import { BarcodeScannerInput } from "@/components/shared/BarcodeScannerInput";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { Button } from "@/components/ui/button";
@@ -30,8 +31,9 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
+import { fetchApi } from "@/lib/fetch-api";
 import { checkinSchema, type CheckinInput } from "@/lib/validations";
-import { formatApiError, formatDate, formatCurrency } from "@/lib/utils";
+import { formatDate, formatCurrency } from "@/lib/utils";
 import { BookCondition, LoanStatus, PaymentStatus } from "@/types";
 
 interface ActiveLoan {
@@ -46,6 +48,7 @@ interface ActiveLoan {
     title: string;
     author: string;
     barcodeValue: string;
+    isbn?: string | null;
     replacementValue: string | null;
   };
   borrower: { fullName: string; phone: string };
@@ -54,10 +57,12 @@ interface ActiveLoan {
 export default function CheckinPage() {
   const router = useRouter();
   const { toast } = useToast();
-  const [barcode, setBarcode] = useState("");
+  const [query, setQuery] = useState("");
   const [searching, setSearching] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [loan, setLoan] = useState<ActiveLoan | null>(null);
+  const [results, setResults] = useState<ActiveLoan[]>([]);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const form = useForm<CheckinInput>({
     resolver: zodResolver(checkinSchema),
@@ -73,38 +78,63 @@ export default function CheckinPage() {
     },
   });
 
-  async function findLoan() {
-    if (!barcode.trim()) return;
+  useEffect(() => {
+    searchInputRef.current?.focus();
+  }, []);
+
+  function selectLoan(active: ActiveLoan) {
+    setLoan(active);
+    setResults([]);
+    form.reset({
+      loanId: active.id,
+      returnCondition: active.checkoutCondition,
+      returnNotes: "",
+      repairCost: null,
+      amountOwed: null,
+      paymentStatus: PaymentStatus.PENDING,
+      markAsLost: false,
+      markAsDamaged: false,
+    });
+  }
+
+  async function findLoan(searchValue?: string) {
+    const value = (searchValue ?? query).trim();
+    if (!value) return;
+
     setSearching(true);
     setLoan(null);
+    setResults([]);
+
     try {
-      const res = await fetch(
-        `/api/loans/lookup?barcode=${encodeURIComponent(barcode.trim())}`
+      const looksLikeBarcode = /^[A-Z0-9\-]+$/i.test(value) && value.length >= 4;
+
+      if (looksLikeBarcode) {
+        try {
+          const exact = await fetchApi<{ data: ActiveLoan }>(
+            `/api/loans/lookup?barcode=${encodeURIComponent(value)}`
+          );
+          selectLoan(exact.data);
+          return;
+        } catch {
+          // fall through to broad search
+        }
+      }
+
+      const search = await fetchApi<{ data: ActiveLoan[] }>(
+        `/api/loans/lookup?q=${encodeURIComponent(value)}`
       );
-      const json = await res.json();
-      if (!res.ok) {
-        throw new Error(formatApiError(json.error) ?? "No active loan found");
+      const loans = search.data ?? [];
+
+      if (loans.length === 0) {
+        throw new Error("No active loan found. Try barcode, title, borrower, or ISBN.");
       }
 
-      const active = json.data as ActiveLoan;
-      if (
-        active.status !== LoanStatus.ACTIVE &&
-        active.status !== LoanStatus.OVERDUE
-      ) {
-        throw new Error("This loan is not active and cannot be checked in.");
+      if (loans.length === 1) {
+        selectLoan(loans[0]);
+        return;
       }
 
-      setLoan(active);
-      form.reset({
-        loanId: active.id,
-        returnCondition: active.checkoutCondition,
-        returnNotes: "",
-        repairCost: null,
-        amountOwed: null,
-        paymentStatus: PaymentStatus.PENDING,
-        markAsLost: false,
-        markAsDamaged: false,
-      });
+      setResults(loans);
     } catch (err) {
       toast({
         variant: "destructive",
@@ -119,13 +149,11 @@ export default function CheckinPage() {
   async function onSubmit(values: CheckinInput) {
     setSubmitting(true);
     try {
-      const res = await fetch(`/api/loans/${values.loanId}`, {
+      await fetchApi(`/api/loans/${values.loanId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(values),
       });
-      const json = await res.json();
-      if (!res.ok) throw new Error(formatApiError(json.error) ?? "Check-in failed");
 
       toast({
         title: "Check-in complete",
@@ -144,38 +172,78 @@ export default function CheckinPage() {
   }
 
   const returnCondition = form.watch("returnCondition");
-  const conditionChanged =
-    loan && returnCondition !== loan.checkoutCondition;
+  const conditionChanged = loan && returnCondition !== loan.checkoutCondition;
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Check-In"
-        description="Return a book and record its condition"
+        description="Scan or search to return a book quickly"
       />
 
       <Card>
         <CardHeader>
-          <CardTitle>Find Loan</CardTitle>
+          <CardTitle>Find Active Loan</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
+          <BarcodeScannerInput
+            value={query}
+            onChange={setQuery}
+            onScan={findLoan}
+            disabled={searching}
+            placeholder="Scan barcode, or search title, borrower, ISBN..."
+          />
           <div className="flex gap-3">
-            <Input
-              placeholder="Scan or enter book barcode..."
-              value={barcode}
-              onChange={(e) => setBarcode(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && findLoan()}
-            />
-            <Button onClick={findLoan} disabled={searching}>
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                ref={searchInputRef}
+                className="pl-9"
+                placeholder="Search by book title or borrower name..."
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && findLoan()}
+              />
+            </div>
+            <Button onClick={() => findLoan()} disabled={searching}>
               {searching ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
-                <Search className="h-4 w-4" />
+                "Search"
               )}
             </Button>
           </div>
+          <p className="text-sm text-muted-foreground">
+            Tip: USB barcode scanners work automatically in the scan field above.
+          </p>
         </CardContent>
       </Card>
+
+      {results.length > 0 ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Select Loan</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {results.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => selectLoan(item)}
+                className="flex w-full items-start justify-between rounded-md border p-3 text-left hover:bg-muted"
+              >
+                <div>
+                  <p className="font-medium">{item.book.title}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {item.borrower.fullName} · {item.book.barcodeValue}
+                  </p>
+                </div>
+                <StatusBadge status={item.status} />
+              </button>
+            ))}
+          </CardContent>
+        </Card>
+      ) : null}
 
       {loan && (
         <div className="grid gap-6 lg:grid-cols-2">
@@ -186,6 +254,9 @@ export default function CheckinPage() {
             <CardContent className="space-y-2 text-sm">
               <p>
                 <strong>Book:</strong> {loan.book.title} by {loan.book.author}
+              </p>
+              <p>
+                <strong>Barcode:</strong> {loan.book.barcodeValue}
               </p>
               <p>
                 <strong>Borrower:</strong> {loan.borrower.fullName}
@@ -296,8 +367,7 @@ export default function CheckinPage() {
                             />
                           </FormControl>
                           <FormLabel className="!mt-0">
-                            Mark as Lost (
-                            {formatCurrency(loan.book.replacementValue)})
+                            Mark as Lost ({formatCurrency(loan.book.replacementValue)})
                           </FormLabel>
                         </FormItem>
                       )}
@@ -314,7 +384,6 @@ export default function CheckinPage() {
                             <Input
                               type="number"
                               step="0.01"
-                              {...field}
                               value={field.value ?? ""}
                               onChange={(e) =>
                                 field.onChange(

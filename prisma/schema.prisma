@@ -69,6 +69,7 @@ enum NotificationType {
   RENEWAL_APPROVED
   LOST_NOTICE
   DAMAGE_NOTICE
+  NEW_BOOK
 }
 
 enum NotificationChannel {

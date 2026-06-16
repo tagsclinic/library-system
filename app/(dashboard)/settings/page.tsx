@@ -8,6 +8,7 @@ import { Loader2 } from "lucide-react";
 import { z } from "zod";
 
 import { GoogleDriveSettings } from "@/components/settings/GoogleDriveSettings";
+import { BackupSettings } from "@/components/settings/BackupSettings";
 import { PublicCatalogLink } from "@/components/settings/PublicCatalogLink";
 import { TeamSettings } from "@/components/settings/TeamSettings";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -128,6 +129,7 @@ function SettingsContent() {
           <TabsTrigger value="general">General</TabsTrigger>
           <TabsTrigger value="team">Team</TabsTrigger>
           <TabsTrigger value="integrations">Integrations</TabsTrigger>
+          <TabsTrigger value="backup">Backup</TabsTrigger>
         </TabsList>
 
         <TabsContent value="general" className="space-y-6">
@@ -181,6 +183,10 @@ function SettingsContent() {
 
         <TabsContent value="integrations" className="space-y-6">
           <GoogleDriveSettings />
+        </TabsContent>
+
+        <TabsContent value="backup">
+          <BackupSettings />
         </TabsContent>
       </Tabs>
     </div>

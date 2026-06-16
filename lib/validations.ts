@@ -11,6 +11,8 @@ import {
   UserRole,
 } from "@prisma/client";
 
+import { isValidPhoneNumber, normalizePhoneDigits } from "@/lib/phone";
+
 export const bookSchema = z.object({
   title: z.string().min(1, "Title is required").max(500),
   author: z.string().min(1, "Author is required").max(500),
@@ -37,15 +39,27 @@ export const bookDuplicateSchema = z.object({
   copies: z.coerce.number().int().min(1).max(50).optional().default(1),
 });
 
+export const bookCreateSchema = bookSchema.extend({
+  notifyMode: z.enum(["NONE", "ALL", "SELECTED"]).optional().default("NONE"),
+  notifyMessage: z.string().max(2000).optional().nullable(),
+  selectedBorrowerIds: z.array(z.string().cuid()).optional(),
+});
+
 export const bookUpdateSchema = bookSchema.partial();
 
 export const borrowerSchema = z.object({
   fullName: z.string().min(1, "Full name is required").max(200),
   phone: z
     .string()
-    .min(7, "Phone number is required")
-    .max(20)
-    .regex(/^[\d\s\-+()]+$/, "Invalid phone number format"),
+    .min(1, "Phone number is required")
+    .refine(isValidPhoneNumber, "Enter a valid 10-digit US phone number")
+    .transform((value) => {
+      const digits = normalizePhoneDigits(value);
+      const area = digits.slice(0, 3);
+      const prefix = digits.slice(3, 6);
+      const line = digits.slice(6, 10);
+      return `(${area}) ${prefix}-${line}`;
+    }),
   email: z.string().email("Invalid email").optional().nullable().or(z.literal("")),
   address: z.string().max(500).optional().nullable(),
   notes: z.string().max(2000).optional().nullable(),
@@ -56,8 +70,8 @@ export const borrowerUpdateSchema = borrowerSchema.partial();
 
 export const checkoutSchema = z
   .object({
-    bookId: z.string().cuid("Invalid book ID"),
-    borrowerId: z.string().cuid("Invalid borrower ID"),
+    bookId: z.string().cuid("Please select a book"),
+    borrowerId: z.string().cuid("Please select or create a borrower before checking out a book"),
     loanPeriodType: z.nativeEnum(LoanPeriodType),
     customDays: z.coerce.number().int().min(1).max(365).optional().nullable(),
     checkoutCondition: z.nativeEnum(BookCondition),
@@ -114,6 +128,7 @@ export const notificationTemplateSchema = z.object({
     "RENEWAL_APPROVED",
     "LOST_NOTICE",
     "DAMAGE_NOTICE",
+    "NEW_BOOK",
   ]),
   subject: z.string().min(1).max(500),
   body: z.string().min(1),
@@ -270,6 +285,7 @@ export const reservationReviewSchema = z.object({
 });
 
 export type BookInput = z.infer<typeof bookSchema>;
+export type BookCreateInput = z.infer<typeof bookCreateSchema>;
 export type BookUpdateInput = z.infer<typeof bookUpdateSchema>;
 export type BorrowerInput = z.infer<typeof borrowerSchema>;
 export type BorrowerUpdateInput = z.infer<typeof borrowerUpdateSchema>;

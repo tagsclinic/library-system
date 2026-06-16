@@ -1,18 +1,30 @@
 "use client";
 
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Check, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Loader2, Plus, Search } from "lucide-react";
 
+import { CheckoutReceiptPrint, type CheckoutReceiptData } from "@/components/checkout/CheckoutReceiptPrint";
+import { TermsAgreementPanel } from "@/components/checkout/TermsAgreementPanel";
+import { BarcodeScannerInput } from "@/components/shared/BarcodeScannerInput";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -30,17 +42,22 @@ import {
   FormDescription,
 } from "@/components/ui/form";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
+import { fetchApi } from "@/lib/fetch-api";
 import { checkoutSchema, type CheckoutInput } from "@/lib/validations";
-import { formatApiError, formatDate, calculateDueDate } from "@/lib/utils";
+import { TERMS_VERSION } from "@/lib/terms";
+import { calculateDueDate, formatDate } from "@/lib/utils";
 import { BookCondition, LoanPeriodType } from "@/types";
 
 const STEPS = ["Borrower", "Book", "Loan Period", "Review & T&C"];
+const BORROWER_REQUIRED_MESSAGE =
+  "Please select or create a borrower before checking out a book.";
 
 interface BorrowerOption {
   id: string;
   fullName: string;
+  phone?: string | null;
+  email?: string | null;
   status: string;
 }
 
@@ -48,6 +65,7 @@ interface BookOption {
   id: string;
   title: string;
   author: string;
+  isbn?: string | null;
   currentCondition: BookCondition;
   barcodeValue: string;
   copyNumber?: number | null;
@@ -62,6 +80,11 @@ export default function CheckoutPage() {
   const [books, setBooks] = useState<BookOption[]>([]);
   const [fetching, setFetching] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [libraryName, setLibraryName] = useState("Library");
+  const [borrowerSearch, setBorrowerSearch] = useState("");
+  const [bookScan, setBookScan] = useState("");
+  const [scanningBook, setScanningBook] = useState(false);
+  const [receipt, setReceipt] = useState<CheckoutReceiptData | null>(null);
 
   const form = useForm<CheckoutInput>({
     resolver: zodResolver(checkoutSchema),
@@ -73,7 +96,7 @@ export default function CheckoutPage() {
       checkoutCondition: BookCondition.GOOD,
       checkoutNotes: "",
       termsAccepted: undefined,
-      termsVersion: "1.0",
+      termsVersion: TERMS_VERSION,
     },
   });
 
@@ -82,32 +105,21 @@ export default function CheckoutPage() {
   useEffect(() => {
     async function load() {
       try {
-        const [borrowersRes, booksRes] = await Promise.all([
-          fetch("/api/borrowers?status=ACTIVE&limit=100"),
-          fetch("/api/books?status=AVAILABLE&limit=100"),
+        const [borrowersData, booksData, settingsData] = await Promise.all([
+          fetchApi<{ data: BorrowerOption[] }>("/api/borrowers?status=ACTIVE&limit=100"),
+          fetchApi<{ data: BookOption[] }>("/api/books?status=AVAILABLE&limit=100"),
+          fetchApi<{ organization?: { name?: string } }>("/api/settings"),
         ]);
-        const borrowersJson = await borrowersRes.json();
-        const booksJson = await booksRes.json();
 
-        if (!borrowersRes.ok) {
-          throw new Error(formatApiError(borrowersJson.error) ?? "Failed to load borrowers");
-        }
-        if (!booksRes.ok) {
-          throw new Error(formatApiError(booksJson.error) ?? "Failed to load books");
-        }
-
-        setBorrowers(borrowersJson.data ?? []);
-        setBooks(booksJson.data ?? []);
+        setBorrowers(borrowersData.data ?? []);
+        setBooks(booksData.data ?? []);
+        setLibraryName(settingsData.organization?.name ?? "Library");
         setLoadError(null);
       } catch (err) {
         const message =
           err instanceof Error ? err.message : "Failed to load checkout data";
         setLoadError(message);
-        toast({
-          variant: "destructive",
-          title: "Error",
-          description: message,
-        });
+        toast({ variant: "destructive", title: "Error", description: message });
       } finally {
         setFetching(false);
       }
@@ -115,30 +127,99 @@ export default function CheckoutPage() {
     load();
   }, [toast]);
 
+  const filteredBorrowers = useMemo(() => {
+    const q = borrowerSearch.trim().toLowerCase();
+    if (!q) return borrowers;
+    return borrowers.filter(
+      (borrower) =>
+        borrower.fullName.toLowerCase().includes(q) ||
+        borrower.phone?.toLowerCase().includes(q) ||
+        borrower.email?.toLowerCase().includes(q) ||
+        borrower.id.toLowerCase().includes(q)
+    );
+  }, [borrowers, borrowerSearch]);
+
   const selectedBorrower = borrowers.find((b) => b.id === watched.borrowerId);
   const selectedBook = books.find((b) => b.id === watched.bookId);
-  const dueDate = calculateDueDate(
-    new Date(),
-    watched.loanPeriodType,
-    watched.customDays
-  );
+
+  const dueDate =
+    watched.loanPeriodType === LoanPeriodType.CUSTOM &&
+    (!watched.customDays || watched.customDays < 1)
+      ? null
+      : calculateDueDate(new Date(), watched.loanPeriodType, watched.customDays);
+
+  async function lookupBookByScan(code: string) {
+    if (!code.trim()) return;
+    setScanningBook(true);
+    try {
+      const result = await fetchApi<{ data: BookOption }>(
+        `/api/books/lookup?barcode=${encodeURIComponent(code.trim())}`
+      );
+      const book = result.data;
+      setBooks((current) => {
+        if (current.some((item) => item.id === book.id)) return current;
+        return [book, ...current];
+      });
+      form.setValue("bookId", book.id, { shouldValidate: true });
+      form.setValue("checkoutCondition", book.currentCondition);
+      setBookScan(book.barcodeValue);
+      toast({
+        title: "Book found",
+        description: `${book.title} selected.`,
+      });
+      if (step < 1) setStep(1);
+    } catch (err) {
+      toast({
+        variant: "destructive",
+        title: "Book not found",
+        description:
+          err instanceof Error
+            ? err.message
+            : "No available book matches this barcode or ISBN.",
+      });
+    } finally {
+      setScanningBook(false);
+    }
+  }
 
   async function onSubmit(values: CheckoutInput) {
+    if (!values.borrowerId) {
+      form.setError("borrowerId", { message: BORROWER_REQUIRED_MESSAGE });
+      setStep(0);
+      return;
+    }
+
     setLoading(true);
     try {
-      const res = await fetch("/api/loans", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(values),
+      const result = await fetchApi<{ data: { id: string; dueDate: string; checkoutDate: string } }>(
+        "/api/loans",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(values),
+        }
+      );
+
+      const loan = result.data;
+      setReceipt({
+        libraryName,
+        borrowerName: selectedBorrower?.fullName ?? "Borrower",
+        borrowerPhone: selectedBorrower?.phone,
+        bookTitle: selectedBook?.title ?? "Book",
+        bookAuthor: selectedBook?.author ?? "",
+        barcode: selectedBook?.barcodeValue,
+        isbn: selectedBook?.isbn,
+        checkoutDate: loan.checkoutDate,
+        dueDate: loan.dueDate,
+        termsAccepted: true,
+        termsVersion: values.termsVersion,
+        loanId: loan.id,
       });
-      const json = await res.json();
-      if (!res.ok) throw new Error(formatApiError(json.error) ?? "Checkout failed");
 
       toast({
         title: "Checkout complete",
         description: `Book checked out to ${selectedBorrower?.fullName}.`,
       });
-      router.push("/dashboard");
     } catch (err) {
       toast({
         variant: "destructive",
@@ -151,6 +232,16 @@ export default function CheckoutPage() {
   }
 
   function nextStep() {
+    if (step === 0 && !form.getValues("borrowerId")) {
+      form.setError("borrowerId", { message: BORROWER_REQUIRED_MESSAGE });
+      toast({
+        variant: "destructive",
+        title: "Borrower required",
+        description: BORROWER_REQUIRED_MESSAGE,
+      });
+      return;
+    }
+
     const fields: (keyof CheckoutInput)[] =
       step === 0
         ? ["borrowerId"]
@@ -171,10 +262,25 @@ export default function CheckoutPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Checkout"
-        description="Check out a book to a borrower"
-      />
+      <PageHeader title="Checkout" description="Check out a book to a borrower" />
+
+      <Card className="border-primary/20 bg-primary/5">
+        <CardContent className="flex flex-col gap-3 pt-6 sm:flex-row sm:items-end">
+          <div className="flex-1 space-y-2">
+            <p className="text-sm font-medium">Quick scan — find available book</p>
+            <BarcodeScannerInput
+              value={bookScan}
+              onChange={setBookScan}
+              onScan={lookupBookByScan}
+              disabled={scanningBook}
+              placeholder="Scan barcode or ISBN to select book..."
+            />
+          </div>
+          {scanningBook ? (
+            <Loader2 className="mb-2 h-5 w-5 animate-spin text-muted-foreground" />
+          ) : null}
+        </CardContent>
+      </Card>
 
       {loadError ? (
         <Alert variant="destructive">
@@ -209,7 +315,7 @@ export default function CheckoutPage() {
         </Alert>
       ) : null}
 
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         {STEPS.map((label, i) => (
           <div key={label} className="flex items-center gap-2">
             <div
@@ -224,55 +330,74 @@ export default function CheckoutPage() {
               {i < step ? <Check className="h-4 w-4" /> : i + 1}
             </div>
             <span className="hidden text-sm sm:inline">{label}</span>
-            {i < STEPS.length - 1 && (
-              <div className="hidden h-px w-8 bg-border sm:block" />
-            )}
           </div>
         ))}
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Step {step + 1}: {STEPS[step]}</CardTitle>
+          <CardTitle>
+            Step {step + 1}: {STEPS[step]}
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
               {step === 0 && (
-                <FormField
-                  control={form.control}
-                  name="borrowerId"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Select Borrower</FormLabel>
-                      <Select
-                        onValueChange={field.onChange}
-                        value={field.value ?? ""}
-                        disabled={!canProceed}
-                      >
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Choose a borrower" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {borrowers.length === 0 ? (
-                            <SelectItem value="__none" disabled>
-                              No active borrowers
-                            </SelectItem>
-                          ) : (
-                            borrowers.map((b) => (
-                              <SelectItem key={b.id} value={b.id}>
-                                {b.fullName}
+                <div className="space-y-4">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      className="pl-9"
+                      placeholder="Search borrower by name, phone, email, or ID..."
+                      value={borrowerSearch}
+                      onChange={(e) => setBorrowerSearch(e.target.value)}
+                    />
+                  </div>
+                  <FormField
+                    control={form.control}
+                    name="borrowerId"
+                    render={({ field }) => (
+                      <FormItem>
+                        <div className="flex items-center justify-between">
+                          <FormLabel>Select Borrower</FormLabel>
+                          <Button type="button" variant="outline" size="sm" asChild>
+                            <Link href="/borrowers/new">
+                              <Plus className="mr-2 h-4 w-4" />
+                              New Borrower
+                            </Link>
+                          </Button>
+                        </div>
+                        <Select
+                          onValueChange={field.onChange}
+                          value={field.value ?? ""}
+                          disabled={!canProceed}
+                        >
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Choose a borrower" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {filteredBorrowers.length === 0 ? (
+                              <SelectItem value="__none" disabled>
+                                No matching borrowers
                               </SelectItem>
-                            ))
-                          )}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                            ) : (
+                              filteredBorrowers.map((b) => (
+                                <SelectItem key={b.id} value={b.id}>
+                                  {b.fullName}
+                                  {b.phone ? ` · ${b.phone}` : ""}
+                                </SelectItem>
+                              ))
+                            )}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
               )}
 
               {step === 1 && (
@@ -288,10 +413,8 @@ export default function CheckoutPage() {
                             field.onChange(val);
                             const book = books.find((b) => b.id === val);
                             if (book) {
-                              form.setValue(
-                                "checkoutCondition",
-                                book.currentCondition
-                              );
+                              form.setValue("checkoutCondition", book.currentCondition);
+                              setBookScan(book.barcodeValue);
                             }
                           }}
                           value={field.value ?? ""}
@@ -303,18 +426,12 @@ export default function CheckoutPage() {
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            {books.length === 0 ? (
-                              <SelectItem value="__none" disabled>
-                                No available books
+                            {books.map((b) => (
+                              <SelectItem key={b.id} value={b.id}>
+                                {b.title} — {b.author}
+                                {b.copyNumber ? ` (Copy ${b.copyNumber})` : ""}
                               </SelectItem>
-                            ) : (
-                              books.map((b) => (
-                                <SelectItem key={b.id} value={b.id}>
-                                  {b.title} — {b.author}
-                                  {b.copyNumber ? ` (Copy ${b.copyNumber})` : ""}
-                                </SelectItem>
-                              ))
-                            )}
+                            ))}
                           </SelectContent>
                         </Select>
                         <FormMessage />
@@ -369,7 +486,17 @@ export default function CheckoutPage() {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Loan Period</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value}>
+                        <Select
+                          onValueChange={(value) => {
+                            field.onChange(value);
+                            if (value === LoanPeriodType.CUSTOM) {
+                              form.setValue("customDays", undefined);
+                            } else {
+                              form.setValue("customDays", null);
+                            }
+                          }}
+                          value={field.value}
+                        >
                           <FormControl>
                             <SelectTrigger>
                               <SelectValue />
@@ -384,7 +511,12 @@ export default function CheckoutPage() {
                           </SelectContent>
                         </Select>
                         <FormDescription>
-                          Due date: {formatDate(dueDate)}
+                          Due date:{" "}
+                          {dueDate
+                            ? formatDate(dueDate)
+                            : watched.loanPeriodType === LoanPeriodType.CUSTOM
+                              ? "Enter number of days below"
+                              : "—"}
                         </FormDescription>
                         <FormMessage />
                       </FormItem>
@@ -396,19 +528,23 @@ export default function CheckoutPage() {
                       name="customDays"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Custom Days</FormLabel>
+                          <FormLabel>Number of Days</FormLabel>
                           <FormControl>
                             <Input
                               type="number"
-                              {...field}
+                              min={1}
+                              max={365}
+                              placeholder="e.g. 1 for one more day"
                               value={field.value ?? ""}
-                              onChange={(e) =>
-                                field.onChange(
-                                  e.target.value ? Number(e.target.value) : null
-                                )
-                              }
+                              onChange={(e) => {
+                                const raw = e.target.value;
+                                field.onChange(raw ? Number(raw) : undefined);
+                              }}
                             />
                           </FormControl>
+                          <FormDescription>
+                            Enter any positive number of days (1–365).
+                          </FormDescription>
                           <FormMessage />
                         </FormItem>
                       )}
@@ -421,24 +557,30 @@ export default function CheckoutPage() {
                 <div className="space-y-4">
                   <div className="rounded-lg border p-4 space-y-2 text-sm">
                     <p>
-                      <strong>Borrower:</strong> {selectedBorrower?.fullName}
+                      <strong>Borrower:</strong> {selectedBorrower?.fullName ?? "—"}
                     </p>
                     <p>
-                      <strong>Book:</strong> {selectedBook?.title} by{" "}
-                      {selectedBook?.author}
+                      <strong>Book:</strong> {selectedBook?.title} by {selectedBook?.author}
+                    </p>
+                    <p>
+                      <strong>Barcode:</strong> {selectedBook?.barcodeValue ?? "—"}
                     </p>
                     <p>
                       <strong>Condition:</strong> {watched.checkoutCondition}
                     </p>
                     <p>
-                      <strong>Due Date:</strong> {formatDate(dueDate)}
+                      <strong>Due Date:</strong>{" "}
+                      {dueDate ? formatDate(dueDate) : "—"}
                     </p>
                   </div>
+
+                  <TermsAgreementPanel libraryName={libraryName} />
+
                   <FormField
                     control={form.control}
                     name="termsAccepted"
                     render={({ field }) => (
-                      <FormItem className="flex items-start space-x-3 space-y-0">
+                      <FormItem className="flex items-start space-x-3 space-y-0 rounded-md border p-4">
                         <FormControl>
                           <Checkbox
                             checked={field.value === true}
@@ -449,11 +591,10 @@ export default function CheckoutPage() {
                         </FormControl>
                         <div className="space-y-1 leading-none">
                           <FormLabel>
-                            I accept the library terms and conditions (v1.0)
+                            Borrower accepts the Terms and Conditions of the Book Agreement
                           </FormLabel>
                           <FormDescription>
-                            Borrower agrees to return the book by the due date
-                            and pay fees for damage or loss.
+                            The borrower must agree before checkout can be completed.
                           </FormDescription>
                           <FormMessage />
                         </div>
@@ -489,6 +630,23 @@ export default function CheckoutPage() {
           </Form>
         </CardContent>
       </Card>
+
+      <Dialog open={Boolean(receipt)} onOpenChange={(open) => !open && setReceipt(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Checkout Successful</DialogTitle>
+            <DialogDescription>
+              Print the receipt for the borrower, then return to the dashboard.
+            </DialogDescription>
+          </DialogHeader>
+          {receipt ? <CheckoutReceiptPrint data={receipt} /> : null}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => router.push("/dashboard")}>
+              Done
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

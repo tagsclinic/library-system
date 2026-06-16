@@ -27,7 +27,7 @@ export async function GET() {
 
   const { organizationId } = auth;
 
-  const [settings, templates] = await Promise.all([
+  const [settings, templates, organization] = await Promise.all([
     prisma.appSettings.findMany({
       where: { organizationId },
       orderBy: { key: "asc" },
@@ -35,6 +35,10 @@ export async function GET() {
     prisma.notificationTemplate.findMany({
       where: { organizationId },
       orderBy: { type: "asc" },
+    }),
+    prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: { id: true, name: true, slug: true },
     }),
   ]);
 
@@ -47,6 +51,7 @@ export async function GET() {
       settings: settingsMap,
       items: settings,
       templates,
+      organization,
     })
   );
 }

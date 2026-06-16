@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -11,6 +11,7 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -28,16 +29,24 @@ import {
 } from "@/components/ui/form";
 import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { bookSchema, type BookInput } from "@/lib/validations";
+import { fetchApi } from "@/lib/fetch-api";
+import { bookCreateSchema, type BookCreateInput } from "@/lib/validations";
 import { BookCondition, BookStatus } from "@/types";
+
+interface BorrowerOption {
+  id: string;
+  fullName: string;
+  email?: string | null;
+}
 
 export default function NewBookPage() {
   const router = useRouter();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
+  const [borrowers, setBorrowers] = useState<BorrowerOption[]>([]);
 
-  const form = useForm<BookInput>({
-    resolver: zodResolver(bookSchema),
+  const form = useForm<BookCreateInput>({
+    resolver: zodResolver(bookCreateSchema),
     defaultValues: {
       title: "",
       author: "",
@@ -52,27 +61,43 @@ export default function NewBookPage() {
       publisher: "",
       edition: "",
       quantity: 1,
+      notifyMode: "NONE",
+      notifyMessage: "",
+      selectedBorrowerIds: [],
     },
   });
 
-  async function onSubmit(values: BookInput) {
+  const notifyMode = form.watch("notifyMode");
+
+  useEffect(() => {
+    if (notifyMode !== "SELECTED") return;
+    fetchApi<{ data: BorrowerOption[] }>("/api/borrowers?status=ACTIVE&limit=100")
+      .then((result) => setBorrowers(result.data ?? []))
+      .catch(() => setBorrowers([]));
+  }, [notifyMode]);
+
+  async function onSubmit(values: BookCreateInput) {
     setLoading(true);
     try {
-      const res = await fetch("/api/books", {
+      const result = await fetchApi<{
+        data: { book?: { id: string }; copiesCreated?: number; announcement?: { sent: number } };
+      }>("/api/books", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(values),
       });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? "Failed to create book");
 
-      const copiesCreated = json.data?.copiesCreated ?? 1;
+      const copiesCreated = result.data?.copiesCreated ?? 1;
+      const sent = result.data?.announcement?.sent ?? 0;
 
       toast({
         title: copiesCreated > 1 ? `${copiesCreated} copies created` : "Book created",
-        description: `"${values.title}" added to catalog.`,
+        description:
+          sent > 0
+            ? `"${values.title}" added and emailed to ${sent} borrower(s).`
+            : `"${values.title}" added to catalog.`,
       });
-      router.push(`/books/${json.data?.book?.id ?? json.data?.id}`);
+      router.push(`/books/${result.data?.book?.id ?? ""}`);
     } catch (err) {
       toast({
         variant: "destructive",
@@ -326,6 +351,93 @@ export default function NewBookPage() {
                   </FormItem>
                 )}
               />
+
+              <div className="space-y-4 rounded-lg border border-dashed p-4">
+                <div>
+                  <p className="font-medium">Notify Borrowers</p>
+                  <p className="text-sm text-muted-foreground">
+                    Optionally email borrowers when this book is added.
+                  </p>
+                </div>
+                <FormField
+                  control={form.control}
+                  name="notifyMode"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Email notification</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value ?? "NONE"}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="NONE">Do not send</SelectItem>
+                          <SelectItem value="ALL">Send to all active borrowers</SelectItem>
+                          <SelectItem value="SELECTED">Send to selected borrowers</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                {notifyMode !== "NONE" ? (
+                  <FormField
+                    control={form.control}
+                    name="notifyMessage"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Library message (optional)</FormLabel>
+                        <FormControl>
+                          <Textarea
+                            {...field}
+                            value={field.value ?? ""}
+                            placeholder="A new book is now available at our library."
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                ) : null}
+                {notifyMode === "SELECTED" ? (
+                  <FormField
+                    control={form.control}
+                    name="selectedBorrowerIds"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Select borrowers with email</FormLabel>
+                        <div className="max-h-40 space-y-2 overflow-y-auto rounded-md border p-3">
+                          {borrowers.filter((b) => b.email).map((borrower) => {
+                            const checked = field.value?.includes(borrower.id) ?? false;
+                            return (
+                              <label
+                                key={borrower.id}
+                                className="flex items-center gap-2 text-sm"
+                              >
+                                <Checkbox
+                                  checked={checked}
+                                  onCheckedChange={(value) => {
+                                    const current = field.value ?? [];
+                                    field.onChange(
+                                      value
+                                        ? [...current, borrower.id]
+                                        : current.filter((id) => id !== borrower.id)
+                                    );
+                                  }}
+                                />
+                                {borrower.fullName} ({borrower.email})
+                              </label>
+                            );
+                          })}
+                        </div>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                ) : null}
+              </div>
+
               <div className="flex gap-3">
                 <Button type="submit" disabled={loading}>
                   {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
