@@ -3,9 +3,24 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { getOrganizationId } from "@/lib/organization";
 import { isSuperAdmin } from "@/lib/platform";
-import { getSupabasePublishableKey, getSupabaseUrl } from "@/lib/supabase/env";
+import {
+  getSupabasePublishableKey,
+  getSupabaseUrl,
+  isSupabaseConfigured,
+} from "@/lib/supabase/env";
 
 export async function updateSession(request: NextRequest) {
+  if (!isSupabaseConfigured()) {
+    if (process.env.NODE_ENV === "development") {
+      console.warn(
+        "Skipping Supabase middleware: NEXT_PUBLIC_SUPABASE_URL or publishable key is not configured."
+      );
+      return NextResponse.next();
+    }
+
+    throw new Error("Missing Supabase environment configuration");
+  }
+
   let supabaseResponse = NextResponse.next({ request });
 
   const supabase = createServerClient(
