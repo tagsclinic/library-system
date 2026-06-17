@@ -52,10 +52,27 @@ export async function GET(request: NextRequest) {
   if (borrowerId) where.borrowerId = borrowerId;
   if (bookId) where.bookId = bookId;
 
+  const activeOnly = searchParams.get("active") === "true";
+  if (activeOnly) {
+    where.status = { in: [LoanStatus.ACTIVE, LoanStatus.OVERDUE] };
+  }
+
+  const q = searchParams.get("q")?.trim();
+  if (q) {
+    where.OR = [
+      { book: { title: { contains: q, mode: "insensitive" } } },
+      { book: { author: { contains: q, mode: "insensitive" } } },
+      { book: { barcodeValue: { contains: q, mode: "insensitive" } } },
+      { borrower: { fullName: { contains: q, mode: "insensitive" } } },
+    ];
+  }
+
   const [loans, total] = await Promise.all([
     prisma.loan.findMany({
       where,
-      orderBy: { checkoutDate: "desc" },
+      orderBy: activeOnly
+        ? [{ dueDate: "asc" }, { checkoutDate: "desc" }]
+        : { checkoutDate: "desc" },
       skip,
       take: limit,
       include: {

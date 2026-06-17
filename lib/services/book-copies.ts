@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import type { Book } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
-import { generateBookCodes } from "@/lib/services/barcode";
+import { generateBookCodes, resolveBookCodes } from "@/lib/services/barcode";
 
 export type BookCopyInput = {
   title: string;
@@ -74,6 +74,54 @@ export async function createBookCopies(input: {
   }
 
   return { books, copyGroupId };
+}
+
+export async function duplicateBookAsNewVolume(input: {
+  organizationId: string;
+  sourceBookId: string;
+  title: string;
+  barcodeValue?: string | null;
+  isbn?: string | null;
+}) {
+  const source = await prisma.book.findFirst({
+    where: {
+      id: input.sourceBookId,
+      organizationId: input.organizationId,
+      deletedAt: null,
+    },
+  });
+
+  if (!source) {
+    throw new Error("Book not found");
+  }
+
+  const codes = await resolveBookCodes(input.organizationId, input.barcodeValue);
+
+  const book = await prisma.book.create({
+    data: {
+      organizationId: input.organizationId,
+      title: input.title.trim(),
+      author: source.author,
+      category: source.category,
+      isbn: input.isbn?.trim() || source.isbn,
+      coverImageUrl: source.coverImageUrl,
+      replacementValue: source.replacementValue,
+      currentCondition: source.currentCondition,
+      status: source.status,
+      notes: source.notes,
+      publishedYear: source.publishedYear,
+      publisher: source.publisher,
+      edition: source.edition,
+      barcodeValue: codes.barcodeValue,
+      qrCodeValue: codes.qrCodeValue,
+      barcodeImage: codes.barcodeImage,
+      qrCodeImage: codes.qrCodeImage,
+      copyGroupId: null,
+      copyNumber: null,
+    },
+  });
+
+  return book;
 }
 
 export async function duplicateBookCopies(input: {

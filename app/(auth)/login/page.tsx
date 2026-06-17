@@ -9,6 +9,7 @@ import { ArrowLeft, BookOpen, Loader2, Mail } from "lucide-react";
 
 import { BRAND } from "@/lib/brand";
 import { loginSchema, type LoginInput } from "@/lib/validations";
+import { PasswordInput } from "@/components/auth/PasswordInput";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -181,8 +182,7 @@ function LoginForm() {
                   <FormItem>
                     <FormLabel>Password</FormLabel>
                     <FormControl>
-                      <Input
-                        type="password"
+                      <PasswordInput
                         autoComplete="current-password"
                         {...field}
                       />

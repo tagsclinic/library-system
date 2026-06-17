@@ -9,6 +9,16 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { fetchApi } from "@/lib/fetch-api";
 
+const BACKUP_SHEETS = [
+  "Borrowers — names, phone, email, address, status",
+  "Checkouts — active loans with book and borrower details",
+  "Check-ins — returned, lost, or damaged loans",
+  "Reservations — pending and completed holds",
+  "Renewals — due date extensions",
+  "Catalog — books with barcode, QR code, status, and condition",
+  "Settings — library configuration",
+];
+
 export function BackupSettings() {
   const { toast } = useToast();
   const [exporting, setExporting] = useState(false);
@@ -33,7 +43,7 @@ export function BackupSettings() {
 
       toast({
         title: "Backup downloaded",
-        description: "Your library data export is ready.",
+        description: "Your full library backup is ready.",
       });
     } catch (err) {
       toast({
@@ -67,7 +77,7 @@ export function BackupSettings() {
 
       toast({
         title: "Import complete",
-        description: `Updated ${result.data.borrowersImported} borrowers, ${result.data.booksImported} books, and ${result.data.settingsImported} settings.`,
+        description: `Updated ${result.data.borrowersImported} borrowers, ${result.data.booksImported} catalog items, and ${result.data.settingsImported} settings.`,
       });
 
       if (result.data.errors.length > 0) {
@@ -93,11 +103,20 @@ export function BackupSettings() {
       <CardHeader>
         <CardTitle>Backup & Restore</CardTitle>
         <CardDescription>
-          Download a full Excel backup or import borrower/settings updates from a
-          previous export.
+          Download a full Excel backup with separate sheets for every part of your
+          library, or import borrower and catalog updates from a previous export.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        <div className="rounded-lg border bg-muted/30 p-4">
+          <p className="text-sm font-medium">Backup includes these sheets</p>
+          <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
+            {BACKUP_SHEETS.map((sheet) => (
+              <li key={sheet}>• {sheet}</li>
+            ))}
+          </ul>
+        </div>
+
         <div className="flex flex-wrap gap-3">
           <Button onClick={exportBackup} disabled={exporting}>
             {exporting ? (
@@ -120,8 +139,9 @@ export function BackupSettings() {
             <p className="text-sm text-muted-foreground">Importing backup...</p>
           ) : null}
           <p className="text-sm text-muted-foreground">
-            Includes books, borrowers, loans, and settings sheets. New books should
-            still be added through the catalog; import updates existing records safely.
+            Import updates borrowers, existing catalog books, and settings. Loan,
+            reservation, and renewal history is included in exports for disaster
+            recovery but is not restored through import yet.
           </p>
         </div>
       </CardContent>

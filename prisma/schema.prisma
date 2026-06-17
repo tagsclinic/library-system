@@ -165,6 +165,8 @@ model Organization {
 model OrganizationIntegration {
   id                    String    @id @default(cuid())
   organizationId        String    @unique
+  googleClientId        String?
+  googleClientSecret    String?   @db.Text
   googleRefreshToken    String?   @db.Text
   googleAccessToken     String?   @db.Text
   googleTokenExpiry     DateTime?

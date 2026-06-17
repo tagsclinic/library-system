@@ -5,8 +5,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Check, ChevronLeft, ChevronRight, Loader2, Plus, Search } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, List, Loader2, Plus, Search } from "lucide-react";
 
+import { ActiveCheckoutsDialog } from "@/components/checkout/ActiveCheckoutsDialog";
 import { CheckoutReceiptPrint, type CheckoutReceiptData } from "@/components/checkout/CheckoutReceiptPrint";
 import { TermsAgreementPanel } from "@/components/checkout/TermsAgreementPanel";
 import { BarcodeScannerInput } from "@/components/shared/BarcodeScannerInput";
@@ -83,8 +84,12 @@ export default function CheckoutPage() {
   const [libraryName, setLibraryName] = useState("Library");
   const [borrowerSearch, setBorrowerSearch] = useState("");
   const [bookScan, setBookScan] = useState("");
+  const [bookSearch, setBookSearch] = useState("");
+  const [bookSearchResults, setBookSearchResults] = useState<BookOption[]>([]);
   const [scanningBook, setScanningBook] = useState(false);
+  const [searchingBook, setSearchingBook] = useState(false);
   const [receipt, setReceipt] = useState<CheckoutReceiptData | null>(null);
+  const [activeCheckoutsOpen, setActiveCheckoutsOpen] = useState(false);
 
   const form = useForm<CheckoutInput>({
     resolver: zodResolver(checkoutSchema),
@@ -101,6 +106,19 @@ export default function CheckoutPage() {
   });
 
   const watched = form.watch();
+
+  async function refreshCheckoutData() {
+    try {
+      const [borrowersData, booksData] = await Promise.all([
+        fetchApi<{ data: BorrowerOption[] }>("/api/borrowers?status=ACTIVE&limit=100"),
+        fetchApi<{ data: BookOption[] }>("/api/books?status=AVAILABLE&limit=100"),
+      ]);
+      setBorrowers(borrowersData.data ?? []);
+      setBooks(booksData.data ?? []);
+    } catch {
+      // keep existing lists if refresh fails
+    }
+  }
 
   useEffect(() => {
     async function load() {
@@ -148,26 +166,32 @@ export default function CheckoutPage() {
       ? null
       : calculateDueDate(new Date(), watched.loanPeriodType, watched.customDays);
 
+  function selectBook(book: BookOption) {
+    setBooks((current) => {
+      if (current.some((item) => item.id === book.id)) return current;
+      return [book, ...current];
+    });
+    form.setValue("bookId", book.id, { shouldValidate: true });
+    form.setValue("checkoutCondition", book.currentCondition);
+    setBookScan(book.barcodeValue);
+    setBookSearch(`${book.title} — ${book.author}`);
+    setBookSearchResults([]);
+    toast({
+      title: "Book selected",
+      description: `${book.title} ready for checkout.`,
+    });
+    if (step < 1) setStep(1);
+  }
+
   async function lookupBookByScan(code: string) {
     if (!code.trim()) return;
     setScanningBook(true);
+    setBookSearchResults([]);
     try {
       const result = await fetchApi<{ data: BookOption }>(
         `/api/books/lookup?barcode=${encodeURIComponent(code.trim())}`
       );
-      const book = result.data;
-      setBooks((current) => {
-        if (current.some((item) => item.id === book.id)) return current;
-        return [book, ...current];
-      });
-      form.setValue("bookId", book.id, { shouldValidate: true });
-      form.setValue("checkoutCondition", book.currentCondition);
-      setBookScan(book.barcodeValue);
-      toast({
-        title: "Book found",
-        description: `${book.title} selected.`,
-      });
-      if (step < 1) setStep(1);
+      selectBook(result.data);
     } catch (err) {
       toast({
         variant: "destructive",
@@ -182,6 +206,59 @@ export default function CheckoutPage() {
     }
   }
 
+  async function searchBooksByText(query?: string) {
+    const q = (query ?? bookSearch).trim();
+    if (!q) return;
+
+    setSearchingBook(true);
+    setBookSearchResults([]);
+
+    try {
+      const localMatches = books.filter(
+        (book) =>
+          book.title.toLowerCase().includes(q.toLowerCase()) ||
+          book.author.toLowerCase().includes(q.toLowerCase()) ||
+          book.isbn?.toLowerCase().includes(q.toLowerCase()) ||
+          book.barcodeValue.toLowerCase().includes(q.toLowerCase())
+      );
+
+      if (localMatches.length > 0) {
+        setBookSearchResults(localMatches.slice(0, 10));
+        if (localMatches.length === 1) {
+          selectBook(localMatches[0]);
+        }
+        return;
+      }
+
+      const result = await fetchApi<{ data: BookOption[] }>(
+        `/api/books?status=AVAILABLE&q=${encodeURIComponent(q)}&limit=10`
+      );
+      const matches = result.data ?? [];
+
+      if (matches.length === 0) {
+        toast({
+          variant: "destructive",
+          title: "No books found",
+          description: `No available books match "${q}".`,
+        });
+        return;
+      }
+
+      setBookSearchResults(matches);
+      if (matches.length === 1) {
+        selectBook(matches[0]);
+      }
+    } catch (err) {
+      toast({
+        variant: "destructive",
+        title: "Search failed",
+        description: err instanceof Error ? err.message : "Could not search books.",
+      });
+    } finally {
+      setSearchingBook(false);
+    }
+  }
+
   async function onSubmit(values: CheckoutInput) {
     if (!values.borrowerId) {
       form.setError("borrowerId", { message: BORROWER_REQUIRED_MESSAGE });
@@ -189,14 +266,30 @@ export default function CheckoutPage() {
       return;
     }
 
+    if (!values.bookId) {
+      form.setError("bookId", { message: "Please select a book" });
+      setStep(1);
+      return;
+    }
+
     setLoading(true);
     try {
+      const payload = {
+        ...values,
+        customDays:
+          values.loanPeriodType === LoanPeriodType.CUSTOM
+            ? values.customDays
+            : null,
+        checkoutNotes: values.checkoutNotes || null,
+        termsVersion: values.termsVersion || TERMS_VERSION,
+      };
+
       const result = await fetchApi<{ data: { id: string; dueDate: string; checkoutDate: string } }>(
         "/api/loans",
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(values),
+          body: JSON.stringify(payload),
         }
       );
 
@@ -231,6 +324,25 @@ export default function CheckoutPage() {
     }
   }
 
+  function onInvalid(errors: typeof form.formState.errors) {
+    const messages = Object.values(errors)
+      .map((error) => error?.message)
+      .filter(Boolean) as string[];
+
+    if (errors.borrowerId) setStep(0);
+    else if (errors.bookId || errors.checkoutCondition) setStep(1);
+    else if (errors.loanPeriodType || errors.customDays) setStep(2);
+    else if (errors.termsAccepted) setStep(3);
+
+    toast({
+      variant: "destructive",
+      title: "Cannot complete checkout",
+      description:
+        messages[0] ??
+        "Please review all steps and make sure the agreement is accepted.",
+    });
+  }
+
   function nextStep() {
     if (step === 0 && !form.getValues("borrowerId")) {
       form.setError("borrowerId", { message: BORROWER_REQUIRED_MESSAGE });
@@ -262,22 +374,106 @@ export default function CheckoutPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Checkout" description="Check out a book to a borrower" />
+      <PageHeader
+        title="Checkout"
+        description="Check out a book to a borrower"
+        action={
+          <Button variant="outline" onClick={() => setActiveCheckoutsOpen(true)}>
+            <List className="mr-2 h-4 w-4" />
+            Active Checkouts
+          </Button>
+        }
+      />
 
       <Card className="border-primary/20 bg-primary/5">
-        <CardContent className="flex flex-col gap-3 pt-6 sm:flex-row sm:items-end">
-          <div className="flex-1 space-y-2">
-            <p className="text-sm font-medium">Quick scan — find available book</p>
+        <CardContent className="space-y-4 pt-6">
+          <div>
+            <p className="text-sm font-medium">Find book — scan or search</p>
+            <p className="text-xs text-muted-foreground">
+              Scan a barcode, or type a book title, author, or ISBN and select from results.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <p className="text-xs font-medium text-muted-foreground">Barcode scan</p>
             <BarcodeScannerInput
               value={bookScan}
               onChange={setBookScan}
               onScan={lookupBookByScan}
-              disabled={scanningBook}
-              placeholder="Scan barcode or ISBN to select book..."
+              disabled={scanningBook || searchingBook}
+              placeholder="Scan barcode or ISBN..."
             />
           </div>
+
+          <div className="space-y-2">
+            <p className="text-xs font-medium text-muted-foreground">Search by title</p>
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  className="pl-9"
+                  value={bookSearch}
+                  onChange={(e) => {
+                    setBookSearch(e.target.value);
+                    setBookSearchResults([]);
+                  }}
+                  onKeyDown={(e) => e.key === "Enter" && searchBooksByText()}
+                  placeholder="Type book title, author, or ISBN..."
+                  disabled={scanningBook || searchingBook}
+                />
+              </div>
+              <Button
+                type="button"
+                onClick={() => searchBooksByText()}
+                disabled={scanningBook || searchingBook || !bookSearch.trim()}
+              >
+                {searchingBook ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  "Search"
+                )}
+              </Button>
+            </div>
+          </div>
+
+          {selectedBook ? (
+            <div className="rounded-md border bg-background px-3 py-2 text-sm">
+              <span className="text-muted-foreground">Selected: </span>
+              <strong>{selectedBook.title}</strong> by {selectedBook.author}
+              {selectedBook.copyNumber ? ` (Copy ${selectedBook.copyNumber})` : ""}
+            </div>
+          ) : null}
+
+          {bookSearchResults.length > 1 ? (
+            <div className="space-y-2 rounded-md border bg-background p-2">
+              <p className="px-1 text-xs font-medium text-muted-foreground">
+                Select a book ({bookSearchResults.length} found)
+              </p>
+              {bookSearchResults.map((book) => (
+                <button
+                  key={book.id}
+                  type="button"
+                  onClick={() => selectBook(book)}
+                  className="flex w-full items-start justify-between rounded-md px-2 py-2 text-left text-sm hover:bg-muted"
+                >
+                  <div>
+                    <p className="font-medium">{book.title}</p>
+                    <p className="text-muted-foreground">
+                      {book.author}
+                      {book.copyNumber ? ` · Copy ${book.copyNumber}` : ""}
+                      {book.barcodeValue ? ` · ${book.barcodeValue}` : ""}
+                    </p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          ) : null}
+
           {scanningBook ? (
-            <Loader2 className="mb-2 h-5 w-5 animate-spin text-muted-foreground" />
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Looking up barcode...
+            </div>
           ) : null}
         </CardContent>
       </Card>
@@ -342,7 +538,10 @@ export default function CheckoutPage() {
         </CardHeader>
         <CardContent>
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+            <form
+              onSubmit={form.handleSubmit(onSubmit, onInvalid)}
+              className="space-y-6"
+            >
               {step === 0 && (
                 <div className="space-y-4">
                   <div className="relative">
@@ -585,7 +784,7 @@ export default function CheckoutPage() {
                           <Checkbox
                             checked={field.value === true}
                             onCheckedChange={(checked) =>
-                              field.onChange(checked === true ? true : undefined)
+                              field.onChange(checked === true)
                             }
                           />
                         </FormControl>
@@ -630,6 +829,12 @@ export default function CheckoutPage() {
           </Form>
         </CardContent>
       </Card>
+
+      <ActiveCheckoutsDialog
+        open={activeCheckoutsOpen}
+        onOpenChange={setActiveCheckoutsOpen}
+        onChanged={refreshCheckoutData}
+      />
 
       <Dialog open={Boolean(receipt)} onOpenChange={(open) => !open && setReceipt(null)}>
         <DialogContent>

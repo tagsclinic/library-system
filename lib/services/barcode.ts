@@ -85,13 +85,39 @@ export async function generateBookCodes(organizationId: string): Promise<{
   barcodeImage: string;
   qrCodeImage: string;
 }> {
-  const barcodeValue = await generateUniqueBarcodeValue(organizationId);
+  return resolveBookCodes(organizationId);
+}
+
+export async function resolveBookCodes(
+  organizationId: string,
+  barcodeValue?: string | null
+): Promise<{
+  barcodeValue: string;
+  qrCodeValue: string;
+  barcodeImage: string;
+  qrCodeImage: string;
+}> {
+  let barcode: string;
+
+  if (barcodeValue?.trim()) {
+    barcode = barcodeValue.trim();
+    const existing = await prisma.book.findFirst({
+      where: { organizationId, barcodeValue: barcode, deletedAt: null },
+      select: { id: true },
+    });
+    if (existing) {
+      throw new Error("Barcode already in use");
+    }
+  } else {
+    barcode = await generateUniqueBarcodeValue(organizationId);
+  }
+
   const qrCodeValue = await generateUniqueQrValue(organizationId);
-  const barcodeImage = generateBarcodeSvg(barcodeValue);
+  const barcodeImage = generateBarcodeSvg(barcode);
   const qrCodeImage = await generateQrDataUrl(qrCodeValue);
 
   return {
-    barcodeValue,
+    barcodeValue: barcode,
     qrCodeValue,
     barcodeImage,
     qrCodeImage,

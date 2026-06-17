@@ -1,9 +1,30 @@
 import * as XLSX from "xlsx";
+import { LoanStatus } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
 
+function appendSheet<T extends Record<string, unknown>>(
+  workbook: XLSX.WorkBook,
+  name: string,
+  rows: T[]
+) {
+  XLSX.utils.book_append_sheet(
+    workbook,
+    XLSX.utils.json_to_sheet(rows.length > 0 ? rows : [{ note: "No records" }]),
+    name
+  );
+}
+
 export async function exportOrganizationBackup(organizationId: string) {
-  const [organization, books, borrowers, loans, settings] = await Promise.all([
+  const [
+    organization,
+    books,
+    borrowers,
+    loans,
+    reservations,
+    renewals,
+    settings,
+  ] = await Promise.all([
     prisma.organization.findUnique({
       where: { id: organizationId },
       select: { id: true, name: true, slug: true, organizationType: true },
@@ -20,8 +41,35 @@ export async function exportOrganizationBackup(organizationId: string) {
       where: { organizationId, deletedAt: null },
       orderBy: { checkoutDate: "desc" },
       include: {
+        book: {
+          select: {
+            title: true,
+            author: true,
+            barcodeValue: true,
+            qrCodeValue: true,
+          },
+        },
+        borrower: { select: { fullName: true, phone: true, email: true } },
+      },
+    }),
+    prisma.bookReservation.findMany({
+      where: { organizationId },
+      orderBy: { createdAt: "desc" },
+      include: {
         book: { select: { title: true, barcodeValue: true } },
-        borrower: { select: { fullName: true } },
+        borrower: { select: { fullName: true, phone: true } },
+      },
+    }),
+    prisma.renewal.findMany({
+      where: { organizationId },
+      orderBy: { createdAt: "desc" },
+      include: {
+        loan: {
+          include: {
+            book: { select: { title: true, barcodeValue: true } },
+            borrower: { select: { fullName: true, phone: true } },
+          },
+        },
       },
     }),
     prisma.appSettings.findMany({
@@ -30,90 +78,179 @@ export async function exportOrganizationBackup(organizationId: string) {
     }),
   ]);
 
+  const openStatuses = new Set<LoanStatus>([
+    LoanStatus.ACTIVE,
+    LoanStatus.OVERDUE,
+  ]);
+  const closedStatuses = new Set<LoanStatus>([
+    LoanStatus.RETURNED,
+    LoanStatus.LOST,
+    LoanStatus.DAMAGED,
+  ]);
+
+  const checkouts = loans.filter((loan) => openStatuses.has(loan.status));
+  const checkins = loans.filter(
+    (loan) =>
+      closedStatuses.has(loan.status) ||
+      loan.returnDate !== null
+  );
+
   const workbook = XLSX.utils.book_new();
 
-  XLSX.utils.book_append_sheet(
+  appendSheet(workbook, "Organization", [
+    {
+      organizationId: organization?.id,
+      name: organization?.name,
+      slug: organization?.slug,
+      type: organization?.organizationType,
+      exportedAt: new Date().toISOString(),
+      exportVersion: 2,
+    },
+  ]);
+
+  appendSheet(
     workbook,
-    XLSX.utils.json_to_sheet([
-      {
-        organizationId: organization?.id,
-        name: organization?.name,
-        slug: organization?.slug,
-        type: organization?.organizationType,
-        exportedAt: new Date().toISOString(),
-      },
-    ]),
-    "Organization"
+    "Borrowers",
+    borrowers.map((borrower) => ({
+      id: borrower.id,
+      fullName: borrower.fullName,
+      phone: borrower.phone,
+      email: borrower.email,
+      address: borrower.address,
+      status: borrower.status,
+      notes: borrower.notes,
+      createdAt: borrower.createdAt.toISOString(),
+      updatedAt: borrower.updatedAt.toISOString(),
+    }))
   );
 
-  XLSX.utils.book_append_sheet(
+  appendSheet(
     workbook,
-    XLSX.utils.json_to_sheet(
-      books.map((book) => ({
-        id: book.id,
-        title: book.title,
-        author: book.author,
-        category: book.category,
-        isbn: book.isbn,
-        barcodeValue: book.barcodeValue,
-        status: book.status,
-        currentCondition: book.currentCondition,
-        replacementValue: book.replacementValue?.toString() ?? null,
-        copyGroupId: book.copyGroupId,
-        copyNumber: book.copyNumber,
-        notes: book.notes,
-      }))
-    ),
-    "Books"
+    "Checkouts",
+    checkouts.map((loan) => ({
+      id: loan.id,
+      bookId: loan.bookId,
+      bookTitle: loan.book.title,
+      bookAuthor: loan.book.author,
+      bookBarcode: loan.book.barcodeValue,
+      bookQrCode: loan.book.qrCodeValue,
+      borrowerId: loan.borrowerId,
+      borrowerName: loan.borrower.fullName,
+      borrowerPhone: loan.borrower.phone,
+      borrowerEmail: loan.borrower.email,
+      checkoutDate: loan.checkoutDate.toISOString(),
+      dueDate: loan.dueDate.toISOString(),
+      status: loan.status,
+      loanPeriodType: loan.loanPeriodType,
+      customDays: loan.customDays,
+      checkoutCondition: loan.checkoutCondition,
+      checkoutNotes: loan.checkoutNotes,
+      checkedOutBy: loan.checkedOutBy,
+      termsAccepted: loan.termsAccepted,
+      termsAcceptedAt: loan.termsAcceptedAt?.toISOString() ?? null,
+    }))
   );
 
-  XLSX.utils.book_append_sheet(
+  appendSheet(
     workbook,
-    XLSX.utils.json_to_sheet(
-      borrowers.map((borrower) => ({
-        id: borrower.id,
-        fullName: borrower.fullName,
-        phone: borrower.phone,
-        email: borrower.email,
-        address: borrower.address,
-        status: borrower.status,
-        notes: borrower.notes,
-      }))
-    ),
-    "Borrowers"
+    "Check-ins",
+    checkins.map((loan) => ({
+      id: loan.id,
+      bookId: loan.bookId,
+      bookTitle: loan.book.title,
+      bookAuthor: loan.book.author,
+      bookBarcode: loan.book.barcodeValue,
+      bookQrCode: loan.book.qrCodeValue,
+      borrowerId: loan.borrowerId,
+      borrowerName: loan.borrower.fullName,
+      borrowerPhone: loan.borrower.phone,
+      borrowerEmail: loan.borrower.email,
+      checkoutDate: loan.checkoutDate.toISOString(),
+      dueDate: loan.dueDate.toISOString(),
+      returnDate: loan.returnDate?.toISOString() ?? null,
+      status: loan.status,
+      returnCondition: loan.returnCondition,
+      returnNotes: loan.returnNotes,
+      checkedInBy: loan.checkedInBy,
+      repairCost: loan.repairCost?.toString() ?? null,
+      amountOwed: loan.amountOwed?.toString() ?? null,
+      paymentStatus: loan.paymentStatus,
+    }))
   );
 
-  XLSX.utils.book_append_sheet(
+  appendSheet(
     workbook,
-    XLSX.utils.json_to_sheet(
-      loans.map((loan) => ({
-        id: loan.id,
-        bookId: loan.bookId,
-        bookTitle: loan.book.title,
-        bookBarcode: loan.book.barcodeValue,
-        borrowerId: loan.borrowerId,
-        borrowerName: loan.borrower.fullName,
-        checkoutDate: loan.checkoutDate.toISOString(),
-        dueDate: loan.dueDate.toISOString(),
-        returnDate: loan.returnDate?.toISOString() ?? null,
-        status: loan.status,
-        loanPeriodType: loan.loanPeriodType,
-        customDays: loan.customDays,
-      }))
-    ),
-    "Loans"
+    "Reservations",
+    reservations.map((reservation) => ({
+      id: reservation.id,
+      bookId: reservation.bookId,
+      bookTitle: reservation.book.title,
+      bookBarcode: reservation.book.barcodeValue,
+      borrowerId: reservation.borrowerId,
+      borrowerName: reservation.borrower.fullName,
+      borrowerPhone: reservation.borrower.phone,
+      status: reservation.status,
+      notes: reservation.notes,
+      reviewedBy: reservation.reviewedBy,
+      reviewedAt: reservation.reviewedAt?.toISOString() ?? null,
+      createdAt: reservation.createdAt.toISOString(),
+    }))
   );
 
-  XLSX.utils.book_append_sheet(
+  appendSheet(
     workbook,
-    XLSX.utils.json_to_sheet(
-      settings.map((setting) => ({
-        key: setting.key,
-        value: setting.value,
-        description: setting.description,
-      }))
-    ),
-    "Settings"
+    "Renewals",
+    renewals.map((renewal) => ({
+      id: renewal.id,
+      loanId: renewal.loanId,
+      bookTitle: renewal.loan.book.title,
+      bookBarcode: renewal.loan.book.barcodeValue,
+      borrowerName: renewal.loan.borrower.fullName,
+      borrowerPhone: renewal.loan.borrower.phone,
+      oldDueDate: renewal.oldDueDate.toISOString(),
+      newDueDate: renewal.newDueDate.toISOString(),
+      reason: renewal.reason,
+      approvedBy: renewal.approvedBy,
+      createdAt: renewal.createdAt.toISOString(),
+    }))
+  );
+
+  appendSheet(
+    workbook,
+    "Catalog",
+    books.map((book) => ({
+      id: book.id,
+      title: book.title,
+      author: book.author,
+      category: book.category,
+      isbn: book.isbn,
+      barcodeValue: book.barcodeValue,
+      qrCodeValue: book.qrCodeValue,
+      barcodeImage: book.barcodeImage,
+      qrCodeImage: book.qrCodeImage,
+      status: book.status,
+      currentCondition: book.currentCondition,
+      replacementValue: book.replacementValue?.toString() ?? null,
+      coverImageUrl: book.coverImageUrl,
+      publishedYear: book.publishedYear,
+      publisher: book.publisher,
+      edition: book.edition,
+      copyGroupId: book.copyGroupId,
+      copyNumber: book.copyNumber,
+      notes: book.notes,
+      createdAt: book.createdAt.toISOString(),
+      updatedAt: book.updatedAt.toISOString(),
+    }))
+  );
+
+  appendSheet(
+    workbook,
+    "Settings",
+    settings.map((setting) => ({
+      key: setting.key,
+      value: setting.value,
+      description: setting.description,
+    }))
   );
 
   return XLSX.write(workbook, { type: "buffer", bookType: "xlsx" }) as Buffer;
@@ -128,12 +265,18 @@ function sheetToJson<T extends Record<string, unknown>>(
   return XLSX.utils.sheet_to_json<T>(sheet);
 }
 
+function readBooksSheet(workbook: XLSX.WorkBook) {
+  const catalog = sheetToJson<Record<string, unknown>>(workbook, "Catalog");
+  if (catalog.length > 0) return catalog;
+  return sheetToJson<Record<string, unknown>>(workbook, "Books");
+}
+
 export async function importOrganizationBackup(
   organizationId: string,
   fileBuffer: Buffer
 ) {
   const workbook = XLSX.read(fileBuffer, { type: "buffer" });
-  const books = sheetToJson<Record<string, unknown>>(workbook, "Books");
+  const books = readBooksSheet(workbook);
   const borrowers = sheetToJson<Record<string, unknown>>(workbook, "Borrowers");
   const settings = sheetToJson<Record<string, unknown>>(workbook, "Settings");
 

@@ -17,7 +17,7 @@ import {
 import { canCheckIn } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { logAudit } from "@/lib/services/audit";
-import { checkinSchema } from "@/lib/validations";
+import { checkinSchema, loanStatusUpdateSchema } from "@/lib/validations";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -60,10 +60,6 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   const body = await request.json();
   const action = body.action as string | undefined;
 
-  if (action && action !== "checkin") {
-    return NextResponse.json({ error: "Invalid action" }, { status: 400 });
-  }
-
   if (!canCheckIn(auth.role)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
@@ -72,6 +68,54 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
   if (!existing) {
     return NextResponse.json({ error: "Loan not found" }, { status: 404 });
+  }
+
+  if (action === "update-status") {
+    const parsed = loanStatusUpdateSchema.safeParse(body);
+    if (!parsed.success) return validationError(parsed.error);
+
+    if (
+      existing.status !== LoanStatus.ACTIVE &&
+      existing.status !== LoanStatus.OVERDUE
+    ) {
+      return NextResponse.json(
+        { error: "Only open loans can have their status updated" },
+        { status: 409 }
+      );
+    }
+
+    const { ipAddress, userAgent } = getRequestMeta(request);
+    const loan = await prisma.loan.update({
+      where: { id },
+      data: { status: parsed.data.status },
+      include: {
+        book: { select: { id: true, title: true, author: true, barcodeValue: true } },
+        borrower: { select: { id: true, fullName: true, phone: true } },
+      },
+    });
+
+    await logAudit({
+      organizationId: auth.organizationId,
+      userId: auth.user.id,
+      userEmail: auth.user.email,
+      action: "STATUS_CHANGE",
+      entityType: "Loan",
+      entityId: loan.id,
+      description: `Updated loan status to ${parsed.data.status} for "${existing.book.title}"`,
+      previousData: serialize(existing),
+      newData: serialize(loan),
+      ipAddress,
+      userAgent,
+      bookId: existing.bookId,
+      borrowerId: existing.borrowerId,
+      loanId: loan.id,
+    });
+
+    return NextResponse.json({ data: serialize(loan) });
+  }
+
+  if (action && action !== "checkin") {
+    return NextResponse.json({ error: "Invalid action" }, { status: 400 });
   }
 
   if (

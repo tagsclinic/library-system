@@ -39,6 +39,12 @@ export const bookDuplicateSchema = z.object({
   copies: z.coerce.number().int().min(1).max(50).optional().default(1),
 });
 
+export const bookDuplicateVolumeSchema = z.object({
+  title: z.string().min(1, "Title is required").max(500),
+  barcodeValue: z.string().max(50).optional().nullable(),
+  isbn: z.string().max(20).optional().nullable(),
+});
+
 export const bookCreateSchema = bookSchema.extend({
   notifyMode: z.enum(["NONE", "ALL", "SELECTED"]).optional().default("NONE"),
   notifyMessage: z.string().max(2000).optional().nullable(),
@@ -73,9 +79,21 @@ export const checkoutSchema = z
     bookId: z.string().cuid("Please select a book"),
     borrowerId: z.string().cuid("Please select or create a borrower before checking out a book"),
     loanPeriodType: z.nativeEnum(LoanPeriodType),
-    customDays: z.coerce.number().int().min(1).max(365).optional().nullable(),
+    customDays: z.preprocess(
+      (value) => {
+        if (value === "" || value === null || value === undefined) return null;
+        const parsed = Number(value);
+        return Number.isNaN(parsed) ? value : parsed;
+      },
+      z.number().int().min(1).max(365).nullable().optional()
+    ),
     checkoutCondition: z.nativeEnum(BookCondition),
-    checkoutNotes: z.string().max(2000).optional().nullable(),
+    checkoutNotes: z
+      .string()
+      .max(2000)
+      .optional()
+      .nullable()
+      .transform((value) => value?.trim() || null),
     termsAccepted: z.literal(true, {
       errorMap: () => ({ message: "Terms and conditions must be accepted" }),
     }),
@@ -100,6 +118,14 @@ export const checkinSchema = z.object({
   paymentStatus: z.nativeEnum(PaymentStatus).optional().nullable(),
   markAsLost: z.boolean().default(false),
   markAsDamaged: z.boolean().default(false),
+});
+
+export const loanStatusUpdateSchema = z.object({
+  action: z.literal("update-status"),
+  status: z.nativeEnum(LoanStatus).refine(
+    (status) => status === LoanStatus.ACTIVE || status === LoanStatus.OVERDUE,
+    { message: "Only ACTIVE or OVERDUE status can be set on open loans" }
+  ),
 });
 
 export const renewalSchema = z.object({
@@ -282,6 +308,11 @@ export const reservationCreateSchema = z.object({
 export const reservationReviewSchema = z.object({
   status: z.enum(["APPROVED", "REJECTED", "FULFILLED", "CANCELLED"]),
   notes: z.string().max(500).optional().nullable(),
+});
+
+export const googleDriveCredentialsSchema = z.object({
+  clientId: z.string().min(1, "Client ID is required").max(500),
+  clientSecret: z.string().min(1, "Client secret is required").max(500),
 });
 
 export type BookInput = z.infer<typeof bookSchema>;

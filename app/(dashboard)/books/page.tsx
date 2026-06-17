@@ -2,8 +2,19 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Plus, Search } from "lucide-react";
+import { Pencil, Plus, Search, Trash2, CopyPlus } from "lucide-react";
 
+import {
+  BookDeleteDialog,
+} from "@/components/books/BookDeleteDialog";
+import {
+  BookDuplicateVolumeDialog,
+  type BookDuplicateVolumeTarget,
+} from "@/components/books/BookDuplicateVolumeDialog";
+import {
+  BookQuickEditDialog,
+  type BookQuickEditTarget,
+} from "@/components/books/BookQuickEditDialog";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
 import { StatusBadge } from "@/components/shared/StatusBadge";
@@ -25,15 +36,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
+import { fetchApi } from "@/lib/fetch-api";
 import { BookStatus } from "@/types";
 
-interface BookRow {
-  id: string;
-  title: string;
-  author: string;
-  category: string | null;
-  isbn: string | null;
-  status: BookStatus;
+interface BookRow extends BookQuickEditTarget {
+  barcodeValue: string;
   copyNumber: number | null;
   copyStats: { total: number; available: number } | null;
 }
@@ -45,19 +52,20 @@ export default function BooksPage() {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<string>("all");
   const [category, setCategory] = useState<string>("all");
+  const [editBook, setEditBook] = useState<BookRow | null>(null);
+  const [deleteBook, setDeleteBook] = useState<BookRow | null>(null);
+  const [duplicateBook, setDuplicateBook] = useState<BookDuplicateVolumeTarget | null>(null);
 
   const fetchBooks = useCallback(async () => {
     setLoading(true);
-    const params = new URLSearchParams();
+    const params = new URLSearchParams({ limit: "100" });
     if (search) params.set("q", search);
     if (status !== "all") params.set("status", status);
     if (category !== "all") params.set("category", category);
 
     try {
-      const res = await fetch(`/api/books?${params}`);
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? "Failed to load books");
-      setBooks(json.data ?? []);
+      const result = await fetchApi<{ data: BookRow[] }>(`/api/books?${params}`);
+      setBooks(result.data ?? []);
     } catch (err) {
       toast({
         variant: "destructive",
@@ -155,7 +163,14 @@ export default function BooksPage() {
               ) : (
                 books.map((book) => (
                   <TableRow key={book.id}>
-                    <TableCell className="font-medium">{book.title}</TableCell>
+                    <TableCell className="font-medium">
+                      <Link
+                        href={`/books/${book.id}`}
+                        className="hover:underline"
+                      >
+                        {book.title}
+                      </Link>
+                    </TableCell>
                     <TableCell>{book.author}</TableCell>
                     <TableCell>{book.category ?? "—"}</TableCell>
                     <TableCell>{book.isbn ?? "—"}</TableCell>
@@ -173,9 +188,38 @@ export default function BooksPage() {
                       <StatusBadge status={book.status} />
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button variant="ghost" size="sm" asChild>
-                        <Link href={`/books/${book.id}`}>View</Link>
-                      </Button>
+                      <div className="flex items-center justify-end gap-1">
+                        <Button variant="ghost" size="sm" asChild>
+                          <Link href={`/books/${book.id}`}>View</Link>
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          title="Duplicate as new volume"
+                          onClick={() => setDuplicateBook(book)}
+                        >
+                          <CopyPlus className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          title="Quick edit"
+                          onClick={() => setEditBook(book)}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-destructive hover:text-destructive"
+                          title="Delete book"
+                          onClick={() => setDeleteBook(book)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))
@@ -184,6 +228,27 @@ export default function BooksPage() {
           </Table>
         </div>
       )}
+
+      <BookQuickEditDialog
+        book={editBook}
+        open={Boolean(editBook)}
+        onOpenChange={(open) => !open && setEditBook(null)}
+        onSaved={fetchBooks}
+      />
+
+      <BookDuplicateVolumeDialog
+        book={duplicateBook}
+        open={Boolean(duplicateBook)}
+        onOpenChange={(open) => !open && setDuplicateBook(null)}
+        onCreated={fetchBooks}
+      />
+
+      <BookDeleteDialog
+        book={deleteBook}
+        open={Boolean(deleteBook)}
+        onOpenChange={(open) => !open && setDeleteBook(null)}
+        onDeleted={fetchBooks}
+      />
     </div>
   );
 }

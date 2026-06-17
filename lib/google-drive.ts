@@ -11,10 +11,31 @@ const DRIVE_SCOPES = [
 const FOLDER_NAME = "LibraryInventory";
 const MAX_COVER_BYTES = 5 * 1024 * 1024;
 
-export function isGoogleDriveConfigured(): boolean {
-  return Boolean(
-    process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET
-  );
+export type GoogleCredentialSource = Pick<
+  OrganizationIntegration,
+  "googleClientId" | "googleClientSecret"
+>;
+
+function resolveGoogleCredentials(
+  integration?: GoogleCredentialSource | null
+): { clientId: string | undefined; clientSecret: string | undefined } {
+  const clientId =
+    integration?.googleClientId?.trim() ||
+    process.env.GOOGLE_CLIENT_ID?.trim() ||
+    undefined;
+  const clientSecret =
+    integration?.googleClientSecret?.trim() ||
+    process.env.GOOGLE_CLIENT_SECRET?.trim() ||
+    undefined;
+
+  return { clientId, clientSecret };
+}
+
+export function isGoogleDriveConfigured(
+  integration?: GoogleCredentialSource | null
+): boolean {
+  const { clientId, clientSecret } = resolveGoogleCredentials(integration);
+  return Boolean(clientId && clientSecret);
 }
 
 export function getGoogleRedirectUri(): string {
@@ -25,12 +46,13 @@ export function getGoogleRedirectUri(): string {
   return `${base}/api/integrations/google-drive/callback`;
 }
 
-export function getGoogleOAuthClient() {
-  const clientId = process.env.GOOGLE_CLIENT_ID;
-  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+export function getGoogleOAuthClient(integration?: GoogleCredentialSource | null) {
+  const { clientId, clientSecret } = resolveGoogleCredentials(integration);
 
   if (!clientId || !clientSecret) {
-    throw new Error("Google OAuth is not configured on this server");
+    throw new Error(
+      "Google OAuth is not configured. Add your Client ID and Client Secret in Settings → Integrations."
+    );
   }
 
   return new google.auth.OAuth2(clientId, clientSecret, getGoogleRedirectUri());
@@ -52,8 +74,11 @@ export function decodeOAuthState(state: string): { organizationId: string } {
   return { organizationId: parsed.organizationId };
 }
 
-export function getGoogleAuthUrl(organizationId: string): string {
-  const oauth2 = getGoogleOAuthClient();
+export function getGoogleAuthUrl(
+  organizationId: string,
+  integration?: GoogleCredentialSource | null
+): string {
+  const oauth2 = getGoogleOAuthClient(integration);
   return oauth2.generateAuthUrl({
     access_type: "offline",
     prompt: "consent",
@@ -62,8 +87,11 @@ export function getGoogleAuthUrl(organizationId: string): string {
   });
 }
 
-export async function exchangeGoogleCode(code: string) {
-  const oauth2 = getGoogleOAuthClient();
+export async function exchangeGoogleCode(
+  code: string,
+  integration?: GoogleCredentialSource | null
+) {
+  const oauth2 = getGoogleOAuthClient(integration);
   const { tokens } = await oauth2.getToken(code);
   return tokens;
 }
@@ -73,7 +101,7 @@ function getAuthenticatedClient(integration: OrganizationIntegration) {
     throw new Error("Google Drive is not connected for this library");
   }
 
-  const oauth2 = getGoogleOAuthClient();
+  const oauth2 = getGoogleOAuthClient(integration);
   oauth2.setCredentials({
     refresh_token: integration.googleRefreshToken,
     access_token: integration.googleAccessToken ?? undefined,

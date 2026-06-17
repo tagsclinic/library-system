@@ -17,12 +17,6 @@ export async function GET(request: NextRequest) {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ?? "";
   const settingsUrl = `${appUrl}/settings?tab=integrations`;
 
-  if (!isGoogleDriveConfigured()) {
-    return NextResponse.redirect(
-      `${settingsUrl}&error=${encodeURIComponent("Google Drive is not configured")}`
-    );
-  }
-
   const code = request.nextUrl.searchParams.get("code");
   const state = request.nextUrl.searchParams.get("state");
   const oauthError = request.nextUrl.searchParams.get("error");
@@ -35,6 +29,16 @@ export async function GET(request: NextRequest) {
 
   try {
     const { organizationId } = decodeOAuthState(state);
+
+    const integration = await prisma.organizationIntegration.findUnique({
+      where: { organizationId },
+    });
+
+    if (!isGoogleDriveConfigured(integration)) {
+      return NextResponse.redirect(
+        `${settingsUrl}&error=${encodeURIComponent("Google OAuth credentials are not configured for this library")}`
+      );
+    }
 
     const supabase = await createClient();
     const {
@@ -51,7 +55,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const tokens = await exchangeGoogleCode(code);
+    const tokens = await exchangeGoogleCode(code, integration);
 
     if (!tokens.refresh_token) {
       return NextResponse.redirect(
@@ -59,10 +63,12 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const integration = await prisma.organizationIntegration.upsert({
+    const updatedIntegration = await prisma.organizationIntegration.upsert({
       where: { organizationId },
       create: {
         organizationId,
+        googleClientId: integration?.googleClientId ?? null,
+        googleClientSecret: integration?.googleClientSecret ?? null,
         googleRefreshToken: tokens.refresh_token,
         googleAccessToken: tokens.access_token ?? null,
         googleTokenExpiry: tokens.expiry_date
@@ -80,8 +86,8 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    const email = await getGoogleAccountEmail(integration);
-    const folderId = await ensureDriveFolder(integration);
+    const email = await getGoogleAccountEmail(updatedIntegration);
+    const folderId = await ensureDriveFolder(updatedIntegration);
 
     await prisma.organizationIntegration.update({
       where: { organizationId },
