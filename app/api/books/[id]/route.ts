@@ -88,11 +88,15 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
   const { ipAddress, userAgent } = getRequestMeta(request);
 
+  // quantity is a create-time-only directive (how many copies to make),
+  // not a column on Book — strip it before passing to update().
+  const { quantity, ...updateData } = parsed.data;
+
   const book = await prisma.book.update({
     where: { id },
     data: {
-      ...parsed.data,
-      coverImageUrl: parsed.data.coverImageUrl || null,
+      ...updateData,
+      coverImageUrl: updateData.coverImageUrl || null,
     },
   });
 
