@@ -2,8 +2,8 @@ import { redirect } from "next/navigation";
 import { NotificationStatus } from "@prisma/client";
 
 import { createClient } from "@/lib/supabase/server";
-import { getUserDisplayName, getUserRole, isSuperAdmin } from "@/lib/auth";
-import { getOrganizationForUser } from "@/lib/organization";
+import { getUserDisplayName, isSuperAdmin } from "@/lib/auth";
+import { resolveMembership } from "@/lib/organization";
 import { prisma } from "@/lib/prisma";
 import { Sidebar } from "@/components/shared/Sidebar";
 import { Topbar } from "@/components/shared/Topbar";
@@ -22,8 +22,12 @@ export default async function DashboardLayout({
     redirect("/login");
   }
 
-  const role = getUserRole(user);
-  const organization = await getOrganizationForUser(user);
+  const { organizationId, role } = await resolveMembership(user);
+  const organization = organizationId
+    ? await prisma.organization.findFirst({
+        where: { id: organizationId, deletedAt: null },
+      })
+    : null;
 
   if (!organization) {
     if (isSuperAdmin(user)) {

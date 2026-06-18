@@ -99,7 +99,7 @@ export async function POST(request: NextRequest) {
 
   const maxRenewalsSetting = await getAppSetting(
     auth.organizationId,
-    "maxRenewals"
+    "max_renewals"
   );
   const maxRenewals = maxRenewalsSetting ? parseInt(maxRenewalsSetting, 10) : 2;
 

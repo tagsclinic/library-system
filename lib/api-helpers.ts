@@ -2,7 +2,6 @@ import { NextResponse, type NextRequest } from "next/server";
 import type { User } from "@supabase/supabase-js";
 import { Prisma, UserRole } from "@prisma/client";
 
-import { getUserRole } from "@/lib/auth";
 import {
   getBorrowerForUser,
   getBorrowerIdFromUser,
@@ -10,7 +9,7 @@ import {
   isBorrowerAccount,
   isBorrowerApproved,
 } from "@/lib/borrower-auth";
-import { getOrganizationId, requireOrganization } from "@/lib/organization";
+import { resolveMembership } from "@/lib/organization";
 import { isSuperAdmin } from "@/lib/platform";
 import { markOverdueLoans } from "@/lib/overdue";
 import { prisma } from "@/lib/prisma";
@@ -61,7 +60,7 @@ export async function requireAuth(): Promise<AuthContext | NextResponse> {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const organizationId = getOrganizationId(user);
+  const { organizationId, role } = await resolveMembership(user);
   if (!organizationId) {
     return NextResponse.json(
       { error: "No organization assigned to user" },
@@ -69,15 +68,16 @@ export async function requireAuth(): Promise<AuthContext | NextResponse> {
     );
   }
 
-  try {
-    await requireOrganization(user);
-  } catch {
+  const organization = await prisma.organization.findFirst({
+    where: { id: organizationId, deletedAt: null },
+  });
+  if (!organization) {
     return NextResponse.json({ error: "Organization not found" }, { status: 403 });
   }
 
   await markOverdueLoans(organizationId);
 
-  return { user, role: getUserRole(user), organizationId };
+  return { user, role, organizationId };
 }
 
 export async function requireOrgAdmin(): Promise<AuthContext | NextResponse> {

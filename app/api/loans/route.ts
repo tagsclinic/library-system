@@ -38,12 +38,16 @@ export async function GET(request: NextRequest) {
     ...notDeleted(),
   };
 
+  const andFilters: Prisma.LoanWhereInput[] = [];
+
   if (status && Object.values(LoanStatus).includes(status)) {
     if (status === LoanStatus.OVERDUE) {
-      where.OR = [
-        { status: LoanStatus.OVERDUE },
-        { status: LoanStatus.ACTIVE, dueDate: { lt: new Date() } },
-      ];
+      andFilters.push({
+        OR: [
+          { status: LoanStatus.OVERDUE },
+          { status: LoanStatus.ACTIVE, dueDate: { lt: new Date() } },
+        ],
+      });
     } else {
       where.status = status;
     }
@@ -59,12 +63,18 @@ export async function GET(request: NextRequest) {
 
   const q = searchParams.get("q")?.trim();
   if (q) {
-    where.OR = [
-      { book: { title: { contains: q, mode: "insensitive" } } },
-      { book: { author: { contains: q, mode: "insensitive" } } },
-      { book: { barcodeValue: { contains: q, mode: "insensitive" } } },
-      { borrower: { fullName: { contains: q, mode: "insensitive" } } },
-    ];
+    andFilters.push({
+      OR: [
+        { book: { title: { contains: q, mode: "insensitive" } } },
+        { book: { author: { contains: q, mode: "insensitive" } } },
+        { book: { barcodeValue: { contains: q, mode: "insensitive" } } },
+        { borrower: { fullName: { contains: q, mode: "insensitive" } } },
+      ],
+    });
+  }
+
+  if (andFilters.length > 0) {
+    where.AND = andFilters;
   }
 
   const [loans, total] = await Promise.all([

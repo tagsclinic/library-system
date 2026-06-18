@@ -42,6 +42,23 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: "Reservation not found" }, { status: 404 });
   }
 
+  const allowedNextStatuses: Record<ReservationStatus, ReservationStatus[]> = {
+    [ReservationStatus.PENDING]: [ReservationStatus.APPROVED, ReservationStatus.REJECTED],
+    [ReservationStatus.APPROVED]: [ReservationStatus.FULFILLED, ReservationStatus.CANCELLED],
+    [ReservationStatus.REJECTED]: [],
+    [ReservationStatus.FULFILLED]: [],
+    [ReservationStatus.CANCELLED]: [],
+  };
+
+  if (!allowedNextStatuses[reservation.status].includes(parsed.data.status as ReservationStatus)) {
+    return NextResponse.json(
+      {
+        error: `Cannot change reservation from ${reservation.status} to ${parsed.data.status}`,
+      },
+      { status: 409 }
+    );
+  }
+
   const updated = await prisma.bookReservation.update({
     where: { id },
     data: {

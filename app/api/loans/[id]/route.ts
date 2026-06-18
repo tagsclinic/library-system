@@ -155,6 +155,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     loanStatus = LoanStatus.DAMAGED;
     bookStatus = BookStatus.DAMAGED;
     bookCondition = BookCondition.DAMAGED;
+    amountOwed = amountOwed ?? repairCost;
     if (repairCost !== null && paymentStatus === null) {
       paymentStatus = PaymentStatus.PENDING;
     }

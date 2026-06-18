@@ -128,16 +128,26 @@ export const loanStatusUpdateSchema = z.object({
   ),
 });
 
-export const renewalSchema = z.object({
-  loanId: z.string().cuid("Invalid loan ID"),
-  loanPeriodType: z.nativeEnum(LoanPeriodType),
-  customDays: z.coerce.number().int().min(1).max(365).optional().nullable(),
-  reason: z.string().max(1000).optional().nullable(),
-});
+export const renewalSchema = z
+  .object({
+    loanId: z.string().cuid("Invalid loan ID"),
+    loanPeriodType: z.nativeEnum(LoanPeriodType),
+    customDays: z.coerce.number().int().min(1).max(365).optional().nullable(),
+    reason: z.string().max(1000).optional().nullable(),
+  })
+  .refine(
+    (data) =>
+      data.loanPeriodType !== LoanPeriodType.CUSTOM ||
+      (data.customDays !== null && data.customDays !== undefined && data.customDays > 0),
+    {
+      message: "Custom loan period requires a valid number of days",
+      path: ["customDays"],
+    }
+  );
 
-export const renewalApprovalSchema = renewalSchema.extend({
-  approved: z.boolean(),
-});
+export const renewalApprovalSchema = renewalSchema.and(
+  z.object({ approved: z.boolean() })
+);
 
 export const appSettingSchema = z.object({
   key: z.string().min(1).max(100),
