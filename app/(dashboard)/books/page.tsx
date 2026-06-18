@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Pencil, Plus, Search, Trash2, CopyPlus } from "lucide-react";
+import { BookOpen, Pencil, Plus, Search, Trash2, CopyPlus } from "lucide-react";
 
 import {
   BookDeleteDialog,
@@ -41,6 +41,7 @@ import { BookStatus } from "@/types";
 
 interface BookRow extends BookQuickEditTarget {
   barcodeValue: string;
+  coverImageUrl: string | null;
   copyNumber: number | null;
   copyStats: { total: number; available: number } | null;
 }
@@ -144,6 +145,7 @@ export default function BooksPage() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-[56px]">Cover</TableHead>
                 <TableHead>Title</TableHead>
                 <TableHead>Author</TableHead>
                 <TableHead>Category</TableHead>
@@ -156,13 +158,29 @@ export default function BooksPage() {
             <TableBody>
               {books.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center text-muted-foreground">
+                  <TableCell colSpan={8} className="text-center text-muted-foreground">
                     No books found
                   </TableCell>
                 </TableRow>
               ) : (
                 books.map((book) => (
                   <TableRow key={book.id}>
+                    <TableCell>
+                      <Link href={`/books/${book.id}`} className="block h-14 w-10 overflow-hidden rounded border bg-muted/40">
+                        {book.coverImageUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={book.coverImageUrl}
+                            alt=""
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center">
+                            <BookOpen className="h-4 w-4 text-muted-foreground" />
+                          </div>
+                        )}
+                      </Link>
+                    </TableCell>
                     <TableCell className="font-medium">
                       <Link
                         href={`/books/${book.id}`}
