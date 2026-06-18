@@ -9,6 +9,10 @@ import { Check, ChevronLeft, ChevronRight, List, Loader2, Plus, Search } from "l
 
 import { ActiveCheckoutsDialog } from "@/components/checkout/ActiveCheckoutsDialog";
 import { CheckoutReceiptPrint, type CheckoutReceiptData } from "@/components/checkout/CheckoutReceiptPrint";
+import {
+  QuickAddBorrowerDialog,
+  type QuickAddedBorrower,
+} from "@/components/checkout/QuickAddBorrowerDialog";
 import { TermsAgreementPanel } from "@/components/checkout/TermsAgreementPanel";
 import { BarcodeScannerInput } from "@/components/shared/BarcodeScannerInput";
 import { PageHeader } from "@/components/shared/PageHeader";
@@ -83,6 +87,9 @@ export default function CheckoutPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [libraryName, setLibraryName] = useState("Library");
   const [borrowerSearch, setBorrowerSearch] = useState("");
+  const [borrowerScan, setBorrowerScan] = useState("");
+  const [scanningBorrower, setScanningBorrower] = useState(false);
+  const [quickAddOpen, setQuickAddOpen] = useState(false);
   const [bookScan, setBookScan] = useState("");
   const [bookSearch, setBookSearch] = useState("");
   const [bookSearchResults, setBookSearchResults] = useState<BookOption[]>([]);
@@ -165,6 +172,47 @@ export default function CheckoutPage() {
     (!watched.customDays || watched.customDays < 1)
       ? null
       : calculateDueDate(new Date(), watched.loanPeriodType, watched.customDays);
+
+  function selectBorrower(borrower: BorrowerOption) {
+    setBorrowers((current) => {
+      if (current.some((item) => item.id === borrower.id)) return current;
+      return [borrower, ...current];
+    });
+    form.setValue("borrowerId", borrower.id, { shouldValidate: true });
+    setBorrowerSearch("");
+    setBorrowerScan("");
+    toast({
+      title: "Borrower selected",
+      description: `${borrower.fullName} ready for checkout.`,
+    });
+    if (step === 0) setStep(1);
+  }
+
+  async function lookupBorrowerByScan(code: string) {
+    if (!code.trim()) return;
+    setScanningBorrower(true);
+    try {
+      const result = await fetchApi<{ data: BorrowerOption }>(
+        `/api/borrowers/lookup?code=${encodeURIComponent(code.trim())}`
+      );
+      selectBorrower(result.data);
+    } catch (err) {
+      toast({
+        variant: "destructive",
+        title: "Borrower not found",
+        description:
+          err instanceof Error
+            ? err.message
+            : "No active borrower matches this library card.",
+      });
+    } finally {
+      setScanningBorrower(false);
+    }
+  }
+
+  function handleBorrowerCreated(borrower: QuickAddedBorrower) {
+    selectBorrower(borrower);
+  }
 
   function selectBook(book: BookOption) {
     setBooks((current) => {
@@ -385,98 +433,197 @@ export default function CheckoutPage() {
         }
       />
 
-      <Card className="border-primary/20 bg-primary/5">
-        <CardContent className="space-y-4 pt-6">
-          <div>
-            <p className="text-sm font-medium">Find book — scan or search</p>
-            <p className="text-xs text-muted-foreground">
-              Scan a barcode, or type a book title, author, or ISBN and select from results.
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <p className="text-xs font-medium text-muted-foreground">Barcode scan</p>
-            <BarcodeScannerInput
-              value={bookScan}
-              onChange={setBookScan}
-              onScan={lookupBookByScan}
-              disabled={scanningBook || searchingBook}
-              placeholder="Scan barcode or ISBN..."
-            />
-          </div>
-
-          <div className="space-y-2">
-            <p className="text-xs font-medium text-muted-foreground">Search by title</p>
-            <div className="flex gap-2">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  className="pl-9"
-                  value={bookSearch}
-                  onChange={(e) => {
-                    setBookSearch(e.target.value);
-                    setBookSearchResults([]);
-                  }}
-                  onKeyDown={(e) => e.key === "Enter" && searchBooksByText()}
-                  placeholder="Type book title, author, or ISBN..."
-                  disabled={scanningBook || searchingBook}
-                />
+      {step === 0 && (
+        <Card className="border-primary/20 bg-primary/5">
+          <CardContent className="space-y-4 pt-6">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <p className="text-sm font-medium">Find borrower — scan or search</p>
+                <p className="text-xs text-muted-foreground">
+                  Scan their digital library card, or search by name, phone, email, or ID.
+                </p>
               </div>
               <Button
                 type="button"
-                onClick={() => searchBooksByText()}
-                disabled={scanningBook || searchingBook || !bookSearch.trim()}
+                variant="outline"
+                size="sm"
+                onClick={() => setQuickAddOpen(true)}
               >
-                {searchingBook ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  "Search"
-                )}
+                <Plus className="mr-2 h-4 w-4" />
+                New Borrower
               </Button>
             </div>
-          </div>
 
-          {selectedBook ? (
-            <div className="rounded-md border bg-background px-3 py-2 text-sm">
-              <span className="text-muted-foreground">Selected: </span>
-              <strong>{selectedBook.title}</strong> by {selectedBook.author}
-              {selectedBook.copyNumber ? ` (Copy ${selectedBook.copyNumber})` : ""}
-            </div>
-          ) : null}
-
-          {bookSearchResults.length > 1 ? (
-            <div className="space-y-2 rounded-md border bg-background p-2">
-              <p className="px-1 text-xs font-medium text-muted-foreground">
-                Select a book ({bookSearchResults.length} found)
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-muted-foreground">
+                Scan library card
               </p>
-              {bookSearchResults.map((book) => (
-                <button
-                  key={book.id}
-                  type="button"
-                  onClick={() => selectBook(book)}
-                  className="flex w-full items-start justify-between rounded-md px-2 py-2 text-left text-sm hover:bg-muted"
-                >
-                  <div>
-                    <p className="font-medium">{book.title}</p>
-                    <p className="text-muted-foreground">
-                      {book.author}
-                      {book.copyNumber ? ` · Copy ${book.copyNumber}` : ""}
-                      {book.barcodeValue ? ` · ${book.barcodeValue}` : ""}
-                    </p>
-                  </div>
-                </button>
-              ))}
+              <BarcodeScannerInput
+                value={borrowerScan}
+                onChange={setBorrowerScan}
+                onScan={lookupBorrowerByScan}
+                disabled={scanningBorrower}
+                placeholder="Scan library card QR code..."
+              />
             </div>
-          ) : null}
 
-          {scanningBook ? (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Looking up barcode...
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-muted-foreground">
+                Search by name, phone, email, or ID
+              </p>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  className="pl-9"
+                  placeholder="Search borrower..."
+                  value={borrowerSearch}
+                  onChange={(e) => setBorrowerSearch(e.target.value)}
+                />
+              </div>
             </div>
-          ) : null}
-        </CardContent>
-      </Card>
+
+            {selectedBorrower ? (
+              <div className="rounded-md border bg-background px-3 py-2 text-sm">
+                <span className="text-muted-foreground">Selected: </span>
+                <strong>{selectedBorrower.fullName}</strong>
+                {selectedBorrower.phone ? ` · ${selectedBorrower.phone}` : ""}
+              </div>
+            ) : null}
+
+            {borrowerSearch.trim() ? (
+              <div className="space-y-2 rounded-md border bg-background p-2">
+                <p className="px-1 text-xs font-medium text-muted-foreground">
+                  {filteredBorrowers.length} found
+                </p>
+                {filteredBorrowers.length === 0 ? (
+                  <p className="px-2 py-2 text-sm text-muted-foreground">
+                    No matching borrowers.
+                  </p>
+                ) : (
+                  filteredBorrowers.slice(0, 8).map((borrower) => (
+                    <button
+                      key={borrower.id}
+                      type="button"
+                      onClick={() => selectBorrower(borrower)}
+                      className="flex w-full items-start justify-between rounded-md px-2 py-2 text-left text-sm hover:bg-muted"
+                    >
+                      <div>
+                        <p className="font-medium">{borrower.fullName}</p>
+                        <p className="text-muted-foreground">
+                          {borrower.phone}
+                          {borrower.email ? ` · ${borrower.email}` : ""}
+                        </p>
+                      </div>
+                    </button>
+                  ))
+                )}
+              </div>
+            ) : null}
+
+            {scanningBorrower ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Looking up library card...
+              </div>
+            ) : null}
+          </CardContent>
+        </Card>
+      )}
+
+      {step === 1 && (
+        <Card className="border-primary/20 bg-primary/5">
+          <CardContent className="space-y-4 pt-6">
+            <div>
+              <p className="text-sm font-medium">Find book — scan or search</p>
+              <p className="text-xs text-muted-foreground">
+                Scan a barcode, or type a book title, author, or ISBN and select from results.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-muted-foreground">Barcode scan</p>
+              <BarcodeScannerInput
+                value={bookScan}
+                onChange={setBookScan}
+                onScan={lookupBookByScan}
+                disabled={scanningBook || searchingBook}
+                placeholder="Scan barcode or ISBN..."
+              />
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-muted-foreground">Search by title</p>
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    className="pl-9"
+                    value={bookSearch}
+                    onChange={(e) => {
+                      setBookSearch(e.target.value);
+                      setBookSearchResults([]);
+                    }}
+                    onKeyDown={(e) => e.key === "Enter" && searchBooksByText()}
+                    placeholder="Type book title, author, or ISBN..."
+                    disabled={scanningBook || searchingBook}
+                  />
+                </div>
+                <Button
+                  type="button"
+                  onClick={() => searchBooksByText()}
+                  disabled={scanningBook || searchingBook || !bookSearch.trim()}
+                >
+                  {searchingBook ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    "Search"
+                  )}
+                </Button>
+              </div>
+            </div>
+
+            {selectedBook ? (
+              <div className="rounded-md border bg-background px-3 py-2 text-sm">
+                <span className="text-muted-foreground">Selected: </span>
+                <strong>{selectedBook.title}</strong> by {selectedBook.author}
+                {selectedBook.copyNumber ? ` (Copy ${selectedBook.copyNumber})` : ""}
+              </div>
+            ) : null}
+
+            {bookSearchResults.length > 1 ? (
+              <div className="space-y-2 rounded-md border bg-background p-2">
+                <p className="px-1 text-xs font-medium text-muted-foreground">
+                  Select a book ({bookSearchResults.length} found)
+                </p>
+                {bookSearchResults.map((book) => (
+                  <button
+                    key={book.id}
+                    type="button"
+                    onClick={() => selectBook(book)}
+                    className="flex w-full items-start justify-between rounded-md px-2 py-2 text-left text-sm hover:bg-muted"
+                  >
+                    <div>
+                      <p className="font-medium">{book.title}</p>
+                      <p className="text-muted-foreground">
+                        {book.author}
+                        {book.copyNumber ? ` · Copy ${book.copyNumber}` : ""}
+                        {book.barcodeValue ? ` · ${book.barcodeValue}` : ""}
+                      </p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            ) : null}
+
+            {scanningBook ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Looking up barcode...
+              </div>
+            ) : null}
+          </CardContent>
+        </Card>
+      )}
 
       {loadError ? (
         <Alert variant="destructive">
@@ -544,29 +691,12 @@ export default function CheckoutPage() {
             >
               {step === 0 && (
                 <div className="space-y-4">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                    <Input
-                      className="pl-9"
-                      placeholder="Search borrower by name, phone, email, or ID..."
-                      value={borrowerSearch}
-                      onChange={(e) => setBorrowerSearch(e.target.value)}
-                    />
-                  </div>
                   <FormField
                     control={form.control}
                     name="borrowerId"
                     render={({ field }) => (
                       <FormItem>
-                        <div className="flex items-center justify-between">
-                          <FormLabel>Select Borrower</FormLabel>
-                          <Button type="button" variant="outline" size="sm" asChild>
-                            <Link href="/borrowers/new">
-                              <Plus className="mr-2 h-4 w-4" />
-                              New Borrower
-                            </Link>
-                          </Button>
-                        </div>
+                        <FormLabel>Or choose from the full list</FormLabel>
                         <Select
                           onValueChange={field.onChange}
                           value={field.value ?? ""}
@@ -834,6 +964,12 @@ export default function CheckoutPage() {
         open={activeCheckoutsOpen}
         onOpenChange={setActiveCheckoutsOpen}
         onChanged={refreshCheckoutData}
+      />
+
+      <QuickAddBorrowerDialog
+        open={quickAddOpen}
+        onOpenChange={setQuickAddOpen}
+        onCreated={handleBorrowerCreated}
       />
 
       <Dialog open={Boolean(receipt)} onOpenChange={(open) => !open && setReceipt(null)}>
