@@ -91,6 +91,7 @@ export async function POST(request: NextRequest) {
       email: parsed.data.email || null,
       address: parsed.data.address ?? null,
       notes: parsed.data.notes ?? null,
+      photoUrl: parsed.data.photoUrl || null,
       status: parsed.data.status,
     },
   });

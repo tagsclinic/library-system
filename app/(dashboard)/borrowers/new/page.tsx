@@ -6,6 +6,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2 } from "lucide-react";
 
+import { ProfilePhotoUpload } from "@/components/borrowers/ProfilePhotoUpload";
 import { PhoneInput } from "@/components/shared/PhoneInput";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -44,6 +45,7 @@ export default function NewBorrowerPage() {
       email: "",
       address: "",
       notes: "",
+      photoUrl: "",
       status: BorrowerStatus.ACTIVE,
     },
   });
@@ -86,6 +88,28 @@ export default function NewBorrowerPage() {
         <CardContent className="pt-6">
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+              <FormField
+                control={form.control}
+                name="photoUrl"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormControl>
+                      <ProfilePhotoUpload
+                        value={field.value}
+                        onChange={field.onChange}
+                        onError={(message) =>
+                          toast({
+                            variant: "destructive",
+                            title: "Photo upload failed",
+                            description: message,
+                          })
+                        }
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
               <div className="grid gap-4 sm:grid-cols-2">
                 <FormField
                   control={form.control}

@@ -84,6 +84,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     data: {
       ...parsed.data,
       email: parsed.data.email || null,
+      photoUrl: parsed.data.photoUrl || null,
     },
   });
 

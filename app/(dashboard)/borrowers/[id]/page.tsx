@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { CreditCard, Pencil } from "lucide-react";
+import { CreditCard, Pencil, User } from "lucide-react";
 
 import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
@@ -49,10 +49,15 @@ interface BorrowerProfile {
   email: string | null;
   address: string | null;
   notes: string | null;
+  photoUrl: string | null;
   status: BorrowerStatus;
   createdAt: string;
   loans: BorrowerLoan[];
   riskProfile: BorrowerRiskProfile;
+}
+
+function borrowerCardId(id: string): string {
+  return id.slice(-8).toUpperCase();
 }
 
 function RiskBadge({ level }: { level: RiskLevel | string }) {
@@ -112,7 +117,7 @@ export default function BorrowerProfilePage() {
     <div className="space-y-6">
       <PageHeader
         title={borrower.fullName}
-        description={borrower.email ?? borrower.phone}
+        description={`${borrower.email ?? borrower.phone} · Borrower ID ${borrowerCardId(borrower.id)}`}
         action={
           <div className="flex gap-2">
             <Button asChild variant="outline">
@@ -137,6 +142,26 @@ export default function BorrowerProfilePage() {
             <CardTitle>Profile</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
+            <div className="mb-2 flex items-center gap-3">
+              <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted">
+                {borrower.photoUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={borrower.photoUrl}
+                    alt=""
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <User className="h-8 w-8 text-muted-foreground" />
+                )}
+              </div>
+              <div>
+                <p className="font-medium">{borrower.fullName}</p>
+                <p className="font-mono text-xs text-muted-foreground">
+                  ID {borrowerCardId(borrower.id)}
+                </p>
+              </div>
+            </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Status</span>
               <StatusBadge status={borrower.status} />

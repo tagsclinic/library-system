@@ -24,6 +24,7 @@ export function CoverImageUpload({
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [storage, setStorage] = useState<string | null>(null);
 
   const uploadFile = useCallback(
     async (file: File) => {
@@ -47,6 +48,7 @@ export function CoverImageUpload({
           throw new Error(json.error ?? "Upload failed");
         }
 
+        setStorage(json.data?.storage ?? null);
         onChange(json.data?.coverImageUrl ?? null);
       } catch (error) {
         onError?.(
@@ -93,7 +95,10 @@ export function CoverImageUpload({
             className="h-24 w-16 rounded-md border object-cover bg-white"
           />
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium">Cover saved to Google Drive</p>
+            <p className="text-sm font-medium">
+              Cover saved
+              {storage === "google-drive" ? " to Google Drive" : ""}
+            </p>
             <p className="text-xs text-muted-foreground truncate">{value}</p>
           </div>
           <Button
@@ -135,7 +140,7 @@ export function CoverImageUpload({
           <div>
             <p className="text-sm font-medium">Upload book cover photo</p>
             <p className="mt-1 text-xs text-muted-foreground">
-              Saved to your library&apos;s Google Drive · JPG, PNG, WebP, GIF · Max 5 MB
+              JPG, PNG, WebP, GIF · Max 5 MB
             </p>
           </div>
         </button>

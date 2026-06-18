@@ -41,6 +41,7 @@
     "@supabase/ssr": "^0.12.0",
     "@supabase/supabase-js": "^2.108.1",
     "@tanstack/react-table": "^8.20.5",
+    "@vercel/blob": "^2.4.0",
     "@xmldom/xmldom": "^0.9.8",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",

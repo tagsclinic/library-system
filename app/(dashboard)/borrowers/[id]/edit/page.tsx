@@ -6,6 +6,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2 } from "lucide-react";
 
+import { ProfilePhotoUpload } from "@/components/borrowers/ProfilePhotoUpload";
 import { PhoneInput } from "@/components/shared/PhoneInput";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
@@ -84,6 +85,7 @@ export default function EditBorrowerPage() {
           email: data.email,
           address: data.address,
           notes: data.notes,
+          photoUrl: data.photoUrl,
           status: data.status,
         });
       } catch (err) {
@@ -154,6 +156,28 @@ export default function EditBorrowerPage() {
           <CardContent>
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                <FormField
+                  control={form.control}
+                  name="photoUrl"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormControl>
+                        <ProfilePhotoUpload
+                          value={field.value}
+                          onChange={field.onChange}
+                          onError={(message) =>
+                            toast({
+                              variant: "destructive",
+                              title: "Photo upload failed",
+                              description: message,
+                            })
+                          }
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
                 <FormField
                   control={form.control}
                   name="fullName"

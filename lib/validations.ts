@@ -69,6 +69,7 @@ export const borrowerSchema = z.object({
   email: z.string().email("Invalid email").optional().nullable().or(z.literal("")),
   address: z.string().max(500).optional().nullable(),
   notes: z.string().max(2000).optional().nullable(),
+  photoUrl: z.string().url().optional().nullable().or(z.literal("")),
   status: z.nativeEnum(BorrowerStatus).default(BorrowerStatus.ACTIVE),
 });
 
