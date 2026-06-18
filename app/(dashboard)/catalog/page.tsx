@@ -27,6 +27,7 @@ interface CatalogBook {
   isbn: string | null;
   status: BookStatus;
   currentCondition: string;
+  coverImageUrl: string | null;
 }
 
 const CATEGORIES = [
@@ -116,8 +117,17 @@ export default function CatalogPage() {
             <Link key={book.id} href={`/books/${book.id}`}>
               <Card className="h-full transition-shadow hover:shadow-md">
                 <CardContent className="p-4">
-                  <div className="mb-3 flex h-32 items-center justify-center rounded-lg bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-900">
-                    <BookOpen className="h-10 w-10 text-slate-400" />
+                  <div className="mb-3 flex h-32 items-center justify-center overflow-hidden rounded-lg bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-900">
+                    {book.coverImageUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={book.coverImageUrl}
+                        alt=""
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <BookOpen className="h-10 w-10 text-slate-400" />
+                    )}
                   </div>
                   <h3 className="line-clamp-2 font-semibold leading-tight">
                     {book.title}
