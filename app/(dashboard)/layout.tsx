@@ -3,7 +3,7 @@ import { NotificationStatus } from "@prisma/client";
 
 import { createClient } from "@/lib/supabase/server";
 import { getUserDisplayName, isSuperAdmin } from "@/lib/auth";
-import { resolveMembership } from "@/lib/organization";
+import { resolveMembership } from "@/lib/membership";
 import { prisma } from "@/lib/prisma";
 import { Sidebar } from "@/components/shared/Sidebar";
 import { Topbar } from "@/components/shared/Topbar";

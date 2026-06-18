@@ -9,7 +9,7 @@ import {
   isBorrowerAccount,
   isBorrowerApproved,
 } from "@/lib/borrower-auth";
-import { resolveMembership } from "@/lib/organization";
+import { resolveMembership } from "@/lib/membership";
 import { isSuperAdmin } from "@/lib/platform";
 import { markOverdueLoans } from "@/lib/overdue";
 import { prisma } from "@/lib/prisma";

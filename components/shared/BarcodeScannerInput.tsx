@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-import { ScanLine } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Camera, ScanLine } from "lucide-react";
 
+import { Button } from "@/components/ui/button";
+import { CameraScanDialog } from "@/components/shared/CameraScanDialog";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
@@ -31,6 +33,7 @@ export function BarcodeScannerInput({
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastKeyTimeRef = useRef<number | null>(null);
   const isScannerBurstRef = useRef(true);
+  const [cameraOpen, setCameraOpen] = useState(false);
 
   useEffect(() => {
     if (autoFocus && inputRef.current) {
@@ -83,22 +86,44 @@ export function BarcodeScannerInput({
     }
   }
 
+  function handleDetected(decodedValue: string) {
+    onChange(decodedValue);
+    onScan(decodedValue);
+  }
+
   return (
-    <div className={cn("relative", className)}>
-      <ScanLine className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-      <Input
-        ref={inputRef}
-        id={id}
-        value={value}
+    <div className={cn("relative flex items-center gap-2", className)}>
+      <div className="relative flex-1">
+        <ScanLine className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          ref={inputRef}
+          id={id}
+          value={value}
+          disabled={disabled}
+          placeholder={placeholder}
+          className="pl-9 font-mono"
+          onChange={(event) => handleChange(event.target.value)}
+          onKeyDown={handleKeyDown}
+          autoComplete="off"
+          autoCorrect="off"
+          spellCheck={false}
+          inputMode="text"
+        />
+      </div>
+      <Button
+        type="button"
+        variant="outline"
+        size="icon"
         disabled={disabled}
-        placeholder={placeholder}
-        className="pl-9 font-mono"
-        onChange={(event) => handleChange(event.target.value)}
-        onKeyDown={handleKeyDown}
-        autoComplete="off"
-        autoCorrect="off"
-        spellCheck={false}
-        inputMode="text"
+        title="Scan with camera"
+        onClick={() => setCameraOpen(true)}
+      >
+        <Camera className="h-4 w-4" />
+      </Button>
+      <CameraScanDialog
+        open={cameraOpen}
+        onOpenChange={setCameraOpen}
+        onDetected={handleDetected}
       />
     </div>
   );

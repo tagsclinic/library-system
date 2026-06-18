@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { Copy, Loader2, Pencil } from "lucide-react";
+import { Copy, Download, Loader2, Pencil, ScanLine } from "lucide-react";
 
 import { PageHeader } from "@/components/shared/PageHeader";
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner";
@@ -48,6 +48,9 @@ interface BookDetail {
   category: string | null;
   isbn: string | null;
   barcodeValue: string;
+  barcodeImage: string | null;
+  qrCodeValue: string;
+  qrCodeImage: string | null;
   coverImageUrl: string | null;
   status: BookStatus;
   currentCondition: BookCondition;
@@ -84,6 +87,7 @@ export default function BookDetailPage() {
   const [duplicateOpen, setDuplicateOpen] = useState(false);
   const [duplicateCopies, setDuplicateCopies] = useState(1);
   const [duplicating, setDuplicating] = useState(false);
+  const [generatingBarcode, setGeneratingBarcode] = useState(false);
 
   async function loadBook() {
     const res = await fetch(`/api/books/${params.id}`);
@@ -136,6 +140,36 @@ export default function BookDetailPage() {
     } finally {
       setDuplicating(false);
     }
+  }
+
+  async function handleGenerateBarcode() {
+    setGeneratingBarcode(true);
+    try {
+      const res = await fetch(`/api/books/${params.id}/generate-barcode`, {
+        method: "POST",
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Failed to generate barcode");
+
+      toast({ title: "Barcode generated" });
+      await loadBook();
+    } catch (err) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description:
+          err instanceof Error ? err.message : "Failed to generate barcode",
+      });
+    } finally {
+      setGeneratingBarcode(false);
+    }
+  }
+
+  function downloadDataUrl(dataUrl: string, filename: string) {
+    const link = document.createElement("a");
+    link.href = dataUrl;
+    link.download = filename;
+    link.click();
   }
 
   if (loading) return <LoadingSpinner className="py-12" />;
@@ -275,6 +309,97 @@ export default function BookDetailPage() {
                 <p className="mt-1">{book.notes}</p>
               </div>
             ) : null}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Barcode &amp; QR Code</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex flex-wrap gap-6">
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-muted-foreground">
+                  Barcode ({book.barcodeValue})
+                </p>
+                {book.barcodeImage ? (
+                  <>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={book.barcodeImage}
+                      alt={`Barcode ${book.barcodeValue}`}
+                      className="h-20 rounded border bg-white p-1"
+                    />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        downloadDataUrl(
+                          book.barcodeImage!,
+                          `barcode-${book.barcodeValue}.svg`
+                        )
+                      }
+                    >
+                      <Download className="mr-2 h-4 w-4" />
+                      Download
+                    </Button>
+                  </>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    No barcode image generated yet.
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-muted-foreground">
+                  QR Code
+                </p>
+                {book.qrCodeImage ? (
+                  <>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={book.qrCodeImage}
+                      alt={`QR code ${book.qrCodeValue}`}
+                      className="h-20 w-20 rounded border bg-white p-1"
+                    />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        downloadDataUrl(
+                          book.qrCodeImage!,
+                          `qrcode-${book.qrCodeValue}.png`
+                        )
+                      }
+                    >
+                      <Download className="mr-2 h-4 w-4" />
+                      Download
+                    </Button>
+                  </>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    No QR code image generated yet.
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {(!book.barcodeImage || !book.qrCodeImage) && (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={generatingBarcode}
+                onClick={handleGenerateBarcode}
+              >
+                {generatingBarcode ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <ScanLine className="mr-2 h-4 w-4" />
+                )}
+                Generate Barcode &amp; QR Code
+              </Button>
+            )}
           </CardContent>
         </Card>
 
