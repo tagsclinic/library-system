@@ -340,7 +340,22 @@ export default function CheckinPage() {
                           <FormControl>
                             <Checkbox
                               checked={field.value}
-                              onCheckedChange={field.onChange}
+                              onCheckedChange={(checked) => {
+                                field.onChange(checked);
+                                if (checked) {
+                                  form.setValue("markAsLost", false);
+                                  form.setValue(
+                                    "returnCondition",
+                                    BookCondition.DAMAGED
+                                  );
+                                } else {
+                                  form.setValue("amountOwed", null);
+                                  form.setValue(
+                                    "returnCondition",
+                                    loan.checkoutCondition
+                                  );
+                                }
+                              }}
                             />
                           </FormControl>
                           <FormLabel className="!mt-0">Mark as Damaged</FormLabel>
@@ -357,10 +372,23 @@ export default function CheckinPage() {
                               checked={field.value}
                               onCheckedChange={(checked) => {
                                 field.onChange(checked);
-                                if (checked && loan.book.replacementValue) {
+                                if (checked) {
+                                  form.setValue("markAsDamaged", false);
+                                  form.setValue(
+                                    "returnCondition",
+                                    BookCondition.LOST
+                                  );
                                   form.setValue(
                                     "amountOwed",
-                                    Number(loan.book.replacementValue)
+                                    loan.book.replacementValue
+                                      ? Number(loan.book.replacementValue)
+                                      : null
+                                  );
+                                } else {
+                                  form.setValue("amountOwed", null);
+                                  form.setValue(
+                                    "returnCondition",
+                                    loan.checkoutCondition
                                   );
                                 }
                               }}
@@ -380,6 +408,32 @@ export default function CheckinPage() {
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Repair Cost ($)</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              value={field.value ?? ""}
+                              onChange={(e) => {
+                                const next = e.target.value
+                                  ? Number(e.target.value)
+                                  : null;
+                                field.onChange(next);
+                                form.setValue("amountOwed", next);
+                              }}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  )}
+                  {(form.watch("markAsDamaged") || form.watch("markAsLost")) && (
+                    <FormField
+                      control={form.control}
+                      name="amountOwed"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Amount Owed ($)</FormLabel>
                           <FormControl>
                             <Input
                               type="number"

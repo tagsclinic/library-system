@@ -29,6 +29,8 @@ export function BarcodeScannerInput({
 }: BarcodeScannerInputProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastKeyTimeRef = useRef<number | null>(null);
+  const isScannerBurstRef = useRef(true);
 
   useEffect(() => {
     if (autoFocus && inputRef.current) {
@@ -36,7 +38,28 @@ export function BarcodeScannerInput({
     }
   }, [autoFocus]);
 
+  // Hardware barcode scanners emit every character within a few
+  // milliseconds of each other. A human typing the same value manually
+  // leaves much longer gaps between keystrokes. Auto-triggering a scan on
+  // a short fixed debounce fires repeatedly on partial input while someone
+  // is still typing, so only auto-scan when the whole input arrived as a
+  // fast burst — manual typists fall back to pressing Enter or Search.
+  const SCANNER_BURST_MAX_GAP_MS = 50;
+  const SCANNER_DEBOUNCE_MS = 120;
+
   function handleChange(nextValue: string) {
+    const now = Date.now();
+
+    if (!nextValue) {
+      isScannerBurstRef.current = true;
+    } else if (
+      lastKeyTimeRef.current !== null &&
+      now - lastKeyTimeRef.current > SCANNER_BURST_MAX_GAP_MS
+    ) {
+      isScannerBurstRef.current = false;
+    }
+    lastKeyTimeRef.current = now;
+
     onChange(nextValue);
 
     if (debounceRef.current) {
@@ -44,11 +67,11 @@ export function BarcodeScannerInput({
     }
 
     const trimmed = nextValue.trim();
-    if (!trimmed) return;
+    if (!trimmed || !isScannerBurstRef.current) return;
 
     debounceRef.current = setTimeout(() => {
       onScan(trimmed);
-    }, 120);
+    }, SCANNER_DEBOUNCE_MS);
   }
 
   function handleKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {

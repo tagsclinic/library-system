@@ -22,7 +22,7 @@ import {
 
 import { BRAND } from "@/lib/brand";
 import { cn } from "@/lib/utils";
-import { canManageSettings, canViewAudit, canManageBorrowers } from "@/lib/auth";
+import { canManageSettings, canViewAudit } from "@/lib/auth";
 import { UserRole } from "@/types";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
@@ -60,12 +60,7 @@ export function Sidebar({
     { href: "/checkout", label: "Check Outs", icon: LogIn },
     { href: "/checkin", label: "Check Ins", icon: ArrowRightLeft },
     { href: "/renewals", label: "Renewals", icon: RefreshCw },
-    {
-      href: "/reservations",
-      label: "Reservations",
-      icon: Bookmark,
-      show: canManageBorrowers(role),
-    },
+    { href: "/reservations", label: "Reservations", icon: Bookmark },
     { href: "/catalog", label: "Catalog", icon: ScanLine },
     { href: "/reports", label: "Reports", icon: BarChart3 },
     {

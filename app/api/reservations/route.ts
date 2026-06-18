@@ -7,16 +7,11 @@ import {
   requireAuth,
   serialize,
 } from "@/lib/api-helpers";
-import { canManageBorrowers } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(request: NextRequest) {
   const auth = await requireAuth();
   if (isErrorResponse(auth)) return auth;
-
-  if (!canManageBorrowers(auth.role)) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
 
   const { searchParams } = request.nextUrl;
   const { page, limit, skip } = parsePagination(searchParams);
